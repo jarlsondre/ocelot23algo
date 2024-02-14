@@ -1,27 +1,38 @@
 import os
+import json
+import numpy as np
+
+from pathlib import Path
 from util import gcio
 from util.constants import (
-    GC_CELL_FPATH,
-    GC_TISSUE_FPATH,
-    GC_METADATA_FPATH,
     GC_DETECTION_OUTPUT_PATH,
 )
 from user.inference import Model
 
+DATA_DIR = "/cluster/projects/vc/data/mic/open/OCELOT/ocelot_data"
 
-def process():
+
+def process_model_output():
     """Process a test patches. This involves iterating over samples,
     inferring and write the cell predictions
     """
 
+    metadata_path = os.path.join(DATA_DIR, "metadata.json")
+    cell_path = os.path.join(DATA_DIR, "images/val/cell/")
+    tissue_path = os.path.join(DATA_DIR, "images/val/tissue/")
+    output_path = Path(
+        "/cluster/work/jssaethe/histopathology_segmentation/ocelot23algo/test/output/cell_classification.json"
+    )
+
     # Initialize the data loader
-    loader = gcio.DataLoader(GC_CELL_FPATH, GC_TISSUE_FPATH)
+    loader = gcio.CustomDataLoader(cell_path, tissue_path)
 
     # Cell detection writer
-    writer = gcio.DetectionWriter(GC_DETECTION_OUTPUT_PATH)
+    writer = gcio.DetectionWriter(output_path)
 
     # Loading metadata
-    meta_dataset = gcio.read_json(GC_METADATA_FPATH)
+    meta_dataset = gcio.read_json(metadata_path)
+    meta_dataset = list(meta_dataset["sample_pairs"].values())
 
     # Instantiate the inferring model
     model = Model(meta_dataset)
@@ -40,4 +51,4 @@ def process():
 
 
 if __name__ == "__main__":
-    process()
+    process_model_output()

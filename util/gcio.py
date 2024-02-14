@@ -19,11 +19,45 @@ def read_json(fpath: Path) -> dict:
     Returns
     -------
     dict:
-        loaded data 
+        loaded data
     """
-    with open(fpath, 'r') as f:
+    with open(fpath, "r") as f:
         data = json.load(f)
     return data
+
+
+class CustomDataLoader:
+    """This class is meant to load and iterate over the samples, but
+    custom to our use-case
+    """
+
+    def __init__(self, cell_path, tissue_path):
+        self.cell_patches = sorted(
+            [os.path.join(cell_path, f) for f in os.listdir(cell_path) if ".jpg" in f]
+        )
+        self.tissue_patches = sorted(
+            [
+                os.path.join(tissue_path, f)
+                for f in os.listdir(tissue_path)
+                if ".jpg" in f
+            ]
+        )
+
+        assert len(self.cell_patches) == len(self.tissue_patches)
+
+        self.cur_idx = 0
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if not self.cur_idx < len(self.cell_patches):
+            raise StopIteration
+
+        cell_patch = np.array(Image.open(self.cell_patches[self.cur_idx]))
+        tissue_patch = np.array(Image.open(self.tissue_patches[self.cur_idx]))
+        self.cur_idx += 1
+        return cell_patch, tissue_patch, self.cur_idx - 1
 
 
 class DataLoader:
@@ -39,18 +73,25 @@ class DataLoader:
     tissue_path: Path
         Path to where the tissue patches can be found
     """
+
     def __init__(self, cell_path, tissue_path):
-        cell_fpath = [os.path.join(cell_path, f) for f in os.listdir(cell_path) if ".tif" in f]
-        tissue_fpath = [os.path.join(tissue_path, f) for f in os.listdir(tissue_path) if ".tif" in f]
+        cell_fpath = [
+            os.path.join(cell_path, f) for f in os.listdir(cell_path) if ".tif" in f
+        ]
+        tissue_fpath = [
+            os.path.join(tissue_path, f) for f in os.listdir(tissue_path) if ".tif" in f
+        ]
         assert len(cell_fpath) == len(tissue_fpath) == 1
 
         self.cell_patches = np.array(Image.open(cell_fpath[0]))
         self.tissue_patches = np.array(Image.open(tissue_fpath[0]))
 
-        assert (self.cell_patches.shape[1:] == SAMPLE_SHAPE[1:]), \
-            "The same of the input cell patch is incorrect"
-        assert (self.tissue_patches.shape[1:] == SAMPLE_SHAPE[1:]), \
-            "The same of the input tissue patch is incorrect"
+        assert (
+            self.cell_patches.shape[1:] == SAMPLE_SHAPE[1:]
+        ), "The same of the input cell patch is incorrect"
+        assert (
+            self.tissue_patches.shape[1:] == SAMPLE_SHAPE[1:]
+        ), "The same of the input tissue patch is incorrect"
 
         # Samples are concatenated across the first axis
         assert self.cell_patches.shape[0] % SAMPLE_SHAPE[0] == 0
@@ -58,8 +99,9 @@ class DataLoader:
 
         self.num_images = self.cell_patches.shape[0] // SAMPLE_SHAPE[0]
 
-        assert self.num_images == self.tissue_patches.shape[0]//SAMPLE_SHAPE[0], \
-            "Cell and tissue patches have different number of instances"
+        assert (
+            self.num_images == self.tissue_patches.shape[0] // SAMPLE_SHAPE[0]
+        ), "Cell and tissue patches have different number of instances"
 
         self.cur_idx = 0
 
@@ -68,9 +110,17 @@ class DataLoader:
 
     def __next__(self):
         if self.cur_idx < self.num_images:
-            # Read patch pair and the corresponding id 
-            cell_patch = self.cell_patches[self.cur_idx*SAMPLE_SHAPE[0]:(self.cur_idx+1)*SAMPLE_SHAPE[0],:,:]
-            tissue_patch = self.tissue_patches[self.cur_idx*SAMPLE_SHAPE[0]:(self.cur_idx+1)*SAMPLE_SHAPE[0],:,:]
+            # Read patch pair and the corresponding id
+            cell_patch = self.cell_patches[
+                self.cur_idx * SAMPLE_SHAPE[0] : (self.cur_idx + 1) * SAMPLE_SHAPE[0],
+                :,
+                :,
+            ]
+            tissue_patch = self.tissue_patches[
+                self.cur_idx * SAMPLE_SHAPE[0] : (self.cur_idx + 1) * SAMPLE_SHAPE[0],
+                :,
+                :,
+            ]
 
             pair_id = self.cur_idx
 
@@ -85,8 +135,8 @@ class DataLoader:
 
 
 class DetectionWriter:
-    """This class writes the cell predictions to the designated 
-    json file path with the Multiple Point format required by 
+    """This class writes the cell predictions to the designated
+    json file path with the Multiple Point format required by
     Grand Challenge
 
     Parameters
@@ -97,24 +147,17 @@ class DetectionWriter:
 
     def __init__(self, output_path: Path):
 
-        if output_path.suffix != '.json':
-            output_path = output_path / '.json' 
+        if output_path.suffix != ".json":
+            output_path = output_path / ".json"
 
         self._output_path = output_path
         self._data = {
             "type": "Multiple points",
             "points": [],
             "version": {"major": 1, "minor": 0},
-        } 
+        }
 
-    def add_point(
-            self, 
-            x: int, 
-            y: int,
-            class_id: int,
-            prob: float, 
-            sample_id: int
-        ):
+    def add_point(self, x: int, y: int, class_id: int, prob: float, sample_id: int):
         """Recording a single point/cell
 
         Parameters
@@ -133,7 +176,8 @@ class DetectionWriter:
         point = {
             "name": "image_{}".format(str(sample_id)),
             "point": [int(x), int(y), int(class_id)],
-            "probability": prob}
+            "probability": prob,
+        }
         self._data["points"].append(point)
 
     def add_points(self, points: List, sample_id: str):
@@ -151,12 +195,11 @@ class DetectionWriter:
 
     def save(self):
         """This method exports the predictions in Multiple Point json
-        format at the designated path. 
-        
+        format at the designated path.
+
         - NOTE: that this will fail if not cells are predicted
         """
         assert len(self._data["points"]) > 0, "No cells were predicted"
         with open(self._output_path, "w", encoding="utf-8") as f:
             json.dump(self._data, f, ensure_ascii=False, indent=4)
         print(f"Predictions were saved at `{self._output_path}`")
-
