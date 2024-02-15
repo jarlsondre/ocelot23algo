@@ -7,7 +7,11 @@ from util import gcio
 from util.constants import (
     GC_DETECTION_OUTPUT_PATH,
 )
-from user.inference import Model
+
+# from user.inference import Deeplabv3CellOnlyModel as Model
+from user.inference import Deeplabv3TissueCellModel as Model
+
+# from user.inference import SegFormerCellOnlyModel as Model
 
 DATA_DIR = "/cluster/projects/vc/data/mic/open/OCELOT/ocelot_data"
 
