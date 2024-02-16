@@ -8,9 +8,9 @@ from util.constants import (
     GC_DETECTION_OUTPUT_PATH,
 )
 
-# from user.inference import Deeplabv3CellOnlyModel as Model
-from user.inference import Deeplabv3TissueCellModel as Model
+from user.inference import Deeplabv3CellOnlyModel as Model
 
+# from user.inference import Deeplabv3TissueCellModel as Model
 # from user.inference import SegFormerCellOnlyModel as Model
 
 DATA_DIR = "/cluster/projects/vc/data/mic/open/OCELOT/ocelot_data"
@@ -20,12 +20,14 @@ def process_model_output():
     """Process a test patches. This involves iterating over samples,
     inferring and write the cell predictions
     """
+    # Set this to "val" or "test"
+    partition = "test"
 
     metadata_path = os.path.join(DATA_DIR, "metadata.json")
-    cell_path = os.path.join(DATA_DIR, "images/val/cell/")
-    tissue_path = os.path.join(DATA_DIR, "images/val/tissue/")
+    cell_path = os.path.join(DATA_DIR, f"images/{partition}/cell/")
+    tissue_path = os.path.join(DATA_DIR, f"images/{partition}/tissue/")
     output_path = Path(
-        "/cluster/work/jssaethe/histopathology_segmentation/ocelot23algo/test/output/cell_classification.json"
+        f"/cluster/work/jssaethe/histopathology_segmentation/eval_outputs/cell_classification_{partition}.json"
     )
 
     # Initialize the data loader

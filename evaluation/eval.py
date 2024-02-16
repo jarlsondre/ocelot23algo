@@ -202,14 +202,16 @@ def main():
     float
         A mF1 value which is average of F1 scores of BC and TC classes.
     """
+    # Set this to "test" or "val"
+    partition = "test"
 
     # Path where algorithm output is stored
-    algorithm_output_path = "/cluster/work/jssaethe/histopathology_segmentation/ocelot23algo/test/output/cell_classification.json"
+    algorithm_output_path = f"/cluster/work/jssaethe/histopathology_segmentation/eval_outputs/cell_classification_{partition}.json"
     with open(algorithm_output_path, "r") as f:
         pred_json = json.load(f)["points"]
 
     # Path where GT is stored
-    gt_path = "/cluster/work/jssaethe/histopathology_segmentation/cell_gt_val.json"
+    gt_path = f"/cluster/work/jssaethe/histopathology_segmentation/eval_outputs/cell_gt_{partition}.json"
     with open(gt_path, "r") as f:
         data = json.load(f)
         gt_json = data["points"]
@@ -239,6 +241,7 @@ def main():
         [scores[f"F1/{cls_name}"] for cls_name in CLS_IDX_TO_NAME.values()]
     ) / len(CLS_IDX_TO_NAME)
 
+    print(f"\nScores for partition: {partition}")
     print(scores)
 
 
