@@ -27,7 +27,7 @@ def process_model_output():
     cell_path = os.path.join(DATA_DIR, f"images/{partition}/cell/")
     tissue_path = os.path.join(DATA_DIR, f"images/{partition}/tissue/")
     output_path = Path(
-        f"/cluster/work/jssaethe/histopathology_segmentation/eval_outputs/cell_classification_{partition}.json"
+        f"{os.getcwd()}/eval_outputs/cell_classification_{partition}.json"
     )
 
     # Initialize the data loader

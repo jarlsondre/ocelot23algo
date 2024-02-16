@@ -1,3 +1,4 @@
+import os
 import re
 import numpy as np
 import json
@@ -206,12 +207,14 @@ def main():
     partition = "test"
 
     # Path where algorithm output is stored
-    algorithm_output_path = f"/cluster/work/jssaethe/histopathology_segmentation/eval_outputs/cell_classification_{partition}.json"
+    algorithm_output_path = (
+        f"{os.getcwd()}/eval_outputs/cell_classification_{partition}.json"
+    )
     with open(algorithm_output_path, "r") as f:
         pred_json = json.load(f)["points"]
 
     # Path where GT is stored
-    gt_path = f"/cluster/work/jssaethe/histopathology_segmentation/eval_outputs/cell_gt_{partition}.json"
+    gt_path = f"{os.getcwd()}/eval_outputs/cell_gt_{partition}.json"
     with open(gt_path, "r") as f:
         data = json.load(f)
         gt_json = data["points"]
