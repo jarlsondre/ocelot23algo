@@ -204,7 +204,7 @@ def main():
         A mF1 value which is average of F1 scores of BC and TC classes.
     """
     # Set this to "test" or "val"
-    partition = "test"
+    partition = "train"
 
     # Path where algorithm output is stored
     algorithm_output_path = (

@@ -31,7 +31,7 @@ class CustomDataLoader:
     custom to our use-case
     """
 
-    def __init__(self, cell_path, tissue_path):
+    def __init__(self, cell_path, tissue_path, tissue_ending: str = ".jpg"):
         self.cell_patches = sorted(
             [os.path.join(cell_path, f) for f in os.listdir(cell_path) if ".jpg" in f]
         )
@@ -39,7 +39,7 @@ class CustomDataLoader:
             [
                 os.path.join(tissue_path, f)
                 for f in os.listdir(tissue_path)
-                if ".jpg" in f
+                if tissue_ending in f
             ]
         )
 
