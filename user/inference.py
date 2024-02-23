@@ -1,9 +1,11 @@
-import torch
+import os
 import sys
+import torch
 import numpy as np
 
-sys.path.append("/cluster/work/jssaethe/histopathology_segmentation")
-from src.deeplabv3.network.modeling import _segm_resnet
+sys.path.append(os.getcwd())
+# from src.deeplabv3.network.modeling import _segm_resnet
+from src.models import DeepLabV3plusModel
 from src.utils.utils import crop_and_upscale_tissue
 from torch.nn.functional import softmax, interpolate
 from skimage.feature import peak_local_max
@@ -29,18 +31,26 @@ class Deeplabv3CellOnlyModel:
         backbone_model = "resnet50"
         dropout_rate = 0.3
         pretrained_backbone = True
-        self.model = _segm_resnet(
-            name="deeplabv3plus",
+
+        # self.model = _segm_resnet(
+        #     name="deeplabv3plus",
+        #     backbone_name=backbone_model,
+        #     num_classes=3,
+        #     num_channels=3,
+        #     output_stride=8,
+        #     pretrained_backbone=pretrained_backbone,
+        #     dropout_rate=dropout_rate,
+        # )
+        self.model = DeepLabV3plusModel(
             backbone_name=backbone_model,
             num_classes=3,
             num_channels=3,
-            output_stride=8,
-            pretrained_backbone=pretrained_backbone,
+            pretrained=pretrained_backbone,
             dropout_rate=dropout_rate,
         )
         self.model.load_state_dict(
             torch.load(
-                "outputs/models/20240218_001834_deeplabv3plus_cell_only_lr-0.0001_dropout-0.3_backbone-resnet50_epochs-100.pth"
+                "outputs/models/20240223_111913_deeplabv3plus-cell-only_pretrained-True_lr-1e-04_dropout-0.3_backbone-resnet50_epochs-20.pth"
             )
         )
         self.model.eval()
