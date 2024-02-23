@@ -12,8 +12,9 @@ from util.constants import (
 
 # from user.inference import Deeplabv3TissueCellModel as Model
 
-# from user.inference import SegFormerCellOnlyModel as Model
-from user.inference import Deeplabv3TissueLeakingModel as Model
+from user.inference import SegFormerCellOnlyModel as Model
+
+# from user.inference import Deeplabv3TissueLeakingModel as Model
 
 DATA_DIR = "/cluster/projects/vc/data/mic/open/OCELOT/ocelot_data"
 
@@ -31,15 +32,15 @@ def process_model_output():
     output_path = Path(
         f"{os.getcwd()}/eval_outputs/cell_classification_{partition}.json"
     )
-    cropped_tissue_path = os.path.join(
-        DATA_DIR, f"annotations/{partition}/cropped_tissue/"
-    )
+    # cropped_tissue_path = os.path.join(
+    #     DATA_DIR, f"annotations/{partition}/cropped_tissue/"
+    # )
 
     # Initialize the data loader
-    # loader = gcio.CustomDataLoader(cell_path, tissue_path)
-    loader = gcio.CustomDataLoader(
-        cell_path, cropped_tissue_path, tissue_ending=".png"
-    )  # For tissue leaking
+    loader = gcio.CustomDataLoader(cell_path, tissue_path)
+    # loader = gcio.CustomDataLoader(
+    #     cell_path, cropped_tissue_path, tissue_ending=".png"
+    # )  # For tissue leaking
 
     # Cell detection writer
     writer = gcio.DetectionWriter(output_path)

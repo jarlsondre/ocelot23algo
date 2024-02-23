@@ -157,7 +157,7 @@ class Deeplabv3TissueCellModel:
         )
         self.tissue_branch.load_state_dict(
             torch.load(
-                "outputs/models/2024-01-21_15-48-32_deeplabv3plus_tissue_branch_lr-1e-05_dropout-0.3_backbone-resnet50_epochs-30.pth"
+                "outputs/models/20240223_105459_deeplabv3plus-tissue-branch_pretrained-True_lr-1e-04_dropout-0.3_backbone-resnet50_epochs-60.pth"
             )
         )
         self.tissue_branch.eval()
@@ -235,14 +235,17 @@ class Deeplabv3TissueCellModel:
         mask = torch.tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
         tissue_prediction = mask[argmaxed].permute(2, 0, 1)
 
-        cell_patch = (
-            torch.tensor(cell_patch).permute(2, 0, 1).to(torch.float32).unsqueeze(0)
-        )
+        cell_patch = torch.tensor(cell_patch).permute(2, 0, 1).to(torch.float32)
         cell_patch = cell_patch / 255.0
+        # Normalizing the cell patch
+        mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+        std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+        cell_patch = (cell_patch - mean) / std
+
+        cell_patch = cell_patch.unsqueeze(0)
 
         model_input = torch.cat([cell_patch, tissue_prediction.unsqueeze(0)], dim=1)
         model_input = model_input.to(self.device)
-
         cell_prediction = self.cell_branch(model_input).squeeze(0).detach().cpu()
         softmaxed = softmax(cell_prediction, dim=0)
 
@@ -454,6 +457,10 @@ class SegFormerCellOnlyModel:
         cell_patch = torch.tensor(cell_patch).permute(2, 0, 1).to(torch.uint8)
         preprocessed = self.image_processor.preprocess(cell_patch, return_tensors="pt")
         cell_patch = torch.tensor(preprocessed["pixel_values"])
+
+        mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+        std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+        cell_patch = (cell_patch - mean) / std
         cell_patch = cell_patch.to(self.device)
 
         output = self.model(cell_patch).logits.squeeze(0).detach().cpu()
