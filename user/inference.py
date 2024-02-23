@@ -4,7 +4,7 @@ import torch
 import numpy as np
 
 sys.path.append(os.getcwd())
-# from src.deeplabv3.network.modeling import _segm_resnet
+from src.deeplabv3.network.modeling import _segm_resnet
 from src.models import DeepLabV3plusModel
 from src.utils.utils import crop_and_upscale_tissue
 from torch.nn.functional import softmax, interpolate
