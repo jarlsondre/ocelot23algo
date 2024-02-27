@@ -1,8 +1,11 @@
+import cv2
 import os
-from pathlib import Path
-import numpy as np
-from PIL import Image
 import json
+import numpy as np
+
+
+from pathlib import Path
+from PIL import Image
 from typing import List
 
 from util.constants import SAMPLE_SHAPE
@@ -33,14 +36,16 @@ class CustomDataLoader:
 
     def __init__(self, cell_path, tissue_path, tissue_ending: str = ".jpg"):
         self.cell_patches = sorted(
-            [os.path.join(cell_path, f) for f in os.listdir(cell_path) if ".jpg" in f]
+            [os.path.join(cell_path, f) for f in os.listdir(cell_path) if ".jpg" in f],
+            key=lambda x: int(x.split("/")[-1].split(".")[0]),
         )
         self.tissue_patches = sorted(
             [
                 os.path.join(tissue_path, f)
                 for f in os.listdir(tissue_path)
                 if tissue_ending in f
-            ]
+            ],
+            key=lambda x: int(x.split("/")[-1].split(".")[0]),
         )
 
         assert len(self.cell_patches) == len(self.tissue_patches)
@@ -54,8 +59,12 @@ class CustomDataLoader:
         if not self.cur_idx < len(self.cell_patches):
             raise StopIteration
 
-        cell_patch = np.array(Image.open(self.cell_patches[self.cur_idx]))
-        tissue_patch = np.array(Image.open(self.tissue_patches[self.cur_idx]))
+        cell_patch = cv2.imread(self.cell_patches[self.cur_idx])
+        tissue_patch = cv2.imread(self.tissue_patches[self.cur_idx])
+
+        cell_patch: np.ndarray = cv2.cvtColor(cell_patch, cv2.COLOR_BGR2RGB)
+        tissue_patch: np.ndarray = cv2.cvtColor(tissue_patch, cv2.COLOR_BGR2RGB)
+
         self.cur_idx += 1
         return cell_patch, tissue_patch, self.cur_idx - 1
 

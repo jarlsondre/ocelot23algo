@@ -2,18 +2,36 @@ import os
 import sys
 import torch
 import numpy as np
+import torch.nn.functional as F
+
+from torch.nn.functional import softmax, interpolate
 
 sys.path.append(os.getcwd())
-from src.deeplabv3.network.modeling import _segm_resnet
+
 from src.models import DeepLabV3plusModel
-from src.utils.utils import crop_and_upscale_tissue
-from torch.nn.functional import softmax, interpolate
+from src.utils.utils import crop_and_resize_tissue_patch
+
 from skimage.feature import peak_local_max
 from transformers import (
     SegformerForSemanticSegmentation,
     SegformerConfig,
     SegformerImageProcessor,
 )
+
+
+def validate_inputs(cell_patch: np.ndarray, tissue_patch: np.ndarray):
+    if not (cell_patch.shape == (1024, 1024, 3)):
+        raise ValueError("Invalid shape for cell_patch")
+    if not (tissue_patch.shape == (1024, 1024, 3)):
+        raise ValueError("Invalid shape for tissue_patch")
+    if not (cell_patch.dtype == np.uint8):
+        raise ValueError("Invalid dtype for cell_patch")
+    if not (tissue_patch.dtype == np.uint8):
+        raise ValueError("Invalid dtype for tissue_patch")
+    if not (cell_patch.min() >= 0 and cell_patch.max() <= 255):
+        raise ValueError("Invalid value range for cell_patch")
+    if not (tissue_patch.min() >= 0 and tissue_patch.max() <= 255):
+        raise ValueError("Invalid value range for tissue_patch")
 
 
 class Deeplabv3CellOnlyModel:
@@ -32,15 +50,6 @@ class Deeplabv3CellOnlyModel:
         dropout_rate = 0.3
         pretrained_backbone = True
 
-        # self.model = _segm_resnet(
-        #     name="deeplabv3plus",
-        #     backbone_name=backbone_model,
-        #     num_classes=3,
-        #     num_channels=3,
-        #     output_stride=8,
-        #     pretrained_backbone=pretrained_backbone,
-        #     dropout_rate=dropout_rate,
-        # )
         self.model = DeepLabV3plusModel(
             backbone_name=backbone_model,
             num_classes=3,
@@ -50,13 +59,13 @@ class Deeplabv3CellOnlyModel:
         )
         self.model.load_state_dict(
             torch.load(
-                "outputs/models/20240223_111913_deeplabv3plus-cell-only_pretrained-True_lr-1e-04_dropout-0.3_backbone-resnet50_epochs-20.pth"
+                "outputs/models/20240223_194405_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_epochs-100.pth"
             )
         )
         self.model.eval()
         self.model.to(self.device)
 
-    def __call__(self, cell_patch, tissue_patch, pair_id):
+    def __call__(self, cell_patch, tissue_patch, pair_id, transform=None):
         """This function detects the cells in the cell patch. Additionally
         the broader tissue context is provided.
 
@@ -82,13 +91,23 @@ class Deeplabv3CellOnlyModel:
         #############################################
         #### YOUR INFERENCE ALGORITHM GOES HERE #####
         #############################################
+        validate_inputs(cell_patch, tissue_patch)
 
-        cell_patch = (
-            torch.tensor(cell_patch).permute(2, 0, 1).to(torch.float32).unsqueeze(0)
-        )
-        cell_patch = cell_patch.to(self.device)
-        cell_patch = cell_patch / 255.0
+        if transform:
+            transformed = transform(image=cell_patch)
+            cell_patch = transformed["image"]
 
+        # Setting range to [0, 1] if not already done
+        if cell_patch.dtype == np.uint8:
+            cell_patch = cell_patch.astype(np.float32) / 255.0
+        elif cell_patch.dtype != np.float32:
+            cell_patch = cell_patch.astype(np.float32)
+
+        # Preparing shape and device for model input
+        cell_patch = torch.from_numpy(cell_patch).permute(2, 0, 1)
+        cell_patch = cell_patch.unsqueeze(0).to(self.device)
+
+        # Getting model output and processing
         output = self.model(cell_patch).squeeze(0).detach().cpu()
         softmaxed = softmax(output, dim=0)
 
@@ -146,42 +165,39 @@ class Deeplabv3TissueCellModel:
         pretrained_backbone = True
 
         # Create tissue branch
-        self.tissue_branch = _segm_resnet(
-            name="deeplabv3plus",
+        self.tissue_branch = DeepLabV3plusModel(
             backbone_name=backbone_model,
             num_classes=3,
             num_channels=3,
-            output_stride=8,
-            pretrained_backbone=pretrained_backbone,
+            pretrained=pretrained_backbone,
             dropout_rate=dropout_rate,
         )
         self.tissue_branch.load_state_dict(
             torch.load(
-                "outputs/models/20240223_105459_deeplabv3plus-tissue-branch_pretrained-True_lr-1e-04_dropout-0.3_backbone-resnet50_epochs-60.pth"
+                "outputs/models/20240223_195028_deeplabv3plus-tissue-branch_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_epochs-100.pth"
             )
         )
         self.tissue_branch.eval()
         self.tissue_branch.to(self.device)
 
         # Create cell branch
-        self.cell_branch = _segm_resnet(
-            name="deeplabv3plus",
+        self.cell_branch = DeepLabV3plusModel(
             backbone_name=backbone_model,
             num_classes=3,
             num_channels=6,
-            output_stride=8,
-            pretrained_backbone=pretrained_backbone,
+            pretrained=pretrained_backbone,
             dropout_rate=dropout_rate,
         )
         self.cell_branch.load_state_dict(
             torch.load(
-                "outputs/models/20240218_001933_deeplabv3plus_cell_branch_lr-0.0001_dropout-0.3_backbone-resnet50_epochs-100.pth"
+                # "outputs/models/20240226_222357_deeplabv3plus-cell-branch_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_epochs-20.pth"
+                "outputs/models/20240223_194933_deeplabv3plus-cell-branch_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_epochs-100.pth"
             )
         )
         self.cell_branch.eval()
         self.cell_branch.to(self.device)
 
-    def __call__(self, cell_patch, tissue_patch, pair_id):
+    def __call__(self, cell_patch, tissue_patch, pair_id, transform=None):
         """This function detects the cells in the cell patch. Additionally
         the broader tissue context is provided.
 
@@ -207,45 +223,60 @@ class Deeplabv3TissueCellModel:
         #############################################
         #### YOUR INFERENCE ALGORITHM GOES HERE #####
         #############################################
-        tissue_patch = (
-            torch.tensor(tissue_patch).permute(2, 0, 1).to(torch.float32).unsqueeze(0)
-        )
-        tissue_patch = tissue_patch.to(self.device)
-        tissue_patch = tissue_patch / 255.0
+        validate_inputs(cell_patch, tissue_patch)
+
+        if transform:
+            transformed = transform(image=cell_patch, tissue=tissue_patch)
+            cell_patch = transformed["image"]
+            tissue_patch = transformed["tissue"]
+
+        # Making sure the range is [0, 1] if no
+        if cell_patch.dtype == np.uint8:
+            cell_patch = cell_patch.astype(np.float32) / 255.0
+        elif cell_patch.dtype != np.float32:
+            cell_patch = cell_patch.astype(np.float32)
+
+        if tissue_patch.dtype == np.uint8:
+            tissue_patch = tissue_patch.astype(np.float32) / 255.0
+        elif tissue_patch.dtype != np.float32:
+            tissue_patch = tissue_patch.astype(np.float32)
+
+        # Preparing shape and device for model input
+        tissue_patch = torch.from_numpy(tissue_patch).permute(2, 0, 1)
+        tissue_patch = tissue_patch.unsqueeze(0).to(self.device)
+
+        # Predicting tissue
         tissue_prediction = self.tissue_branch(tissue_patch).squeeze(0).detach().cpu()
+        tissue_prediction = tissue_prediction.argmax(dim=0)
 
-        # Cropping the tissue image and upscaling it to the original size
-        offset_tensor = (
-            torch.tensor([meta_pair["patch_y_offset"], meta_pair["patch_x_offset"]])
-            * 1024
+        # Getting metadata to crop data
+        tissue_mpp = meta_pair["tissue"]["resized_mpp_x"]
+        cell_mpp = meta_pair["cell"]["resized_mpp_x"]
+        x_offset = meta_pair["patch_x_offset"]
+        y_offset = meta_pair["patch_y_offset"]
+
+        cropped_tissue: torch.Tensor = crop_and_resize_tissue_patch(
+            image=tissue_prediction,
+            tissue_mpp=tissue_mpp,
+            cell_mpp=cell_mpp,
+            x_offset=x_offset,
+            y_offset=y_offset,
+            input_height=1024,
+            input_width=1024,
         )
 
-        # x and y mpp are the same
-        scaling_value = (
-            meta_pair["cell"]["resized_mpp_x"] / meta_pair["tissue"]["resized_mpp_x"]
-        )
-        cropped_tissue = crop_and_upscale_tissue(
-            tissue_tensor=tissue_prediction,
-            offset_tensor=offset_tensor,
-            scaling_value=scaling_value,
-        )
+        tissue_prediction = F.one_hot(cropped_tissue, num_classes=3).permute(2, 0, 1)
+        tissue_prediction = tissue_prediction.unsqueeze(0)
 
-        # Creating one-hot for the tissue prediction
-        argmaxed = torch.argmax(cropped_tissue, dim=0)
-        mask = torch.tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
-        tissue_prediction = mask[argmaxed].permute(2, 0, 1)
-
-        cell_patch = torch.tensor(cell_patch).permute(2, 0, 1).to(torch.float32)
-        cell_patch = cell_patch / 255.0
-        # Normalizing the cell patch
-        mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
-        std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
-        cell_patch = (cell_patch - mean) / std
-
+        # Cell Patch
+        cell_patch = torch.from_numpy(cell_patch).permute(2, 0, 1)
         cell_patch = cell_patch.unsqueeze(0)
 
-        model_input = torch.cat([cell_patch, tissue_prediction.unsqueeze(0)], dim=1)
+        # Concatenating to create final input
+        model_input = torch.cat([cell_patch, tissue_prediction], dim=1)
         model_input = model_input.to(self.device)
+
+        # Getting prediction
         cell_prediction = self.cell_branch(model_input).squeeze(0).detach().cpu()
         softmaxed = softmax(cell_prediction, dim=0)
 
@@ -302,24 +333,23 @@ class Deeplabv3TissueLeakingModel:
         dropout_rate = 0.3
         pretrained_backbone = True
 
-        self.model = _segm_resnet(
-            name="deeplabv3plus",
+        self.model = DeepLabV3plusModel(
             backbone_name=backbone_model,
             num_classes=3,
             num_channels=6,
-            output_stride=8,
-            pretrained_backbone=pretrained_backbone,
+            pretrained=pretrained_backbone,
             dropout_rate=dropout_rate,
         )
         self.model.load_state_dict(
             torch.load(
-                "outputs/models/20240218_002202_deeplabv3plus_tissue_leaking_lr-0.0001_dropout-0.3_backbone-resnet50_epochs-100.pth"
+                # "outputs/models/20240223_195731_deeplabv3plus-tissue-leaking_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_epochs-100.pth"
+                "outputs/models/20240223_194933_deeplabv3plus-cell-branch_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_epochs-100.pth"
             )
         )
         self.model.eval()
         self.model.to(self.device)
 
-    def __call__(self, cell_patch, tissue_patch, pair_id):
+    def __call__(self, cell_patch, tissue_patch, pair_id, transform=None):
         """This function detects the cells in the cell patch. Additionally
         the broader tissue context is provided.
 
@@ -345,17 +375,31 @@ class Deeplabv3TissueLeakingModel:
         #############################################
         #### YOUR INFERENCE ALGORITHM GOES HERE #####
         #############################################
+        validate_inputs(cell_patch, tissue_patch)
+        if transform:
+            transformed = transform(image=cell_patch, tissue=tissue_patch)
+            cell_patch = transformed["image"]
+            tissue_patch = transformed["tissue"]
 
-        cell_patch = cell_patch.astype(np.float32) / 255.0
+        # Making sure the range is [0, 1] if no
+        if cell_patch.dtype == np.uint8:
+            cell_patch = cell_patch.astype(np.float32) / 255.0
+        elif cell_patch.dtype != np.float32:
+            cell_patch = cell_patch.astype(np.float32)
+
+        if tissue_patch.dtype == np.uint8:
+            tissue_patch = tissue_patch.astype(np.float32) / 255.0
+        elif tissue_patch.dtype != np.float32:
+            tissue_patch = tissue_patch.astype(np.float32)
+
         cell_patch = torch.from_numpy(cell_patch).permute(2, 0, 1)
-        cell_patch = cell_patch.unsqueeze(0)
+        cell_patch = cell_patch.unsqueeze(0).to(self.device)
 
-        tissue_patch = tissue_patch.astype(np.float32)
+        # tissue_patch = tissue_patch.astype(np.float32)
         tissue_patch = torch.from_numpy(tissue_patch).permute(2, 0, 1)
-        tissue_patch = tissue_patch.unsqueeze(0)
+        tissue_patch = tissue_patch.unsqueeze(0).to(self.device)
 
         model_input = torch.cat([cell_patch, tissue_patch], dim=1)
-        model_input = model_input.to(self.device)
 
         cell_prediction = self.model(model_input).squeeze(0).detach().cpu()
         softmaxed = softmax(cell_prediction, dim=0)
@@ -419,10 +463,12 @@ class SegFormerCellOnlyModel:
         self.model = SegformerForSemanticSegmentation(configuration)
         self.model.load_state_dict(
             torch.load(
-                "outputs/models/20240218_001834_segformer_cell_only_pretrained-0_lr-0.0001_epochs-100.pth"
+                "outputs/models/20240223_203530_segformer-cell-only_pretrained-1_lr-1e-04_epochs-100.pth"
             )
         )
-        self.image_processor = SegformerImageProcessor(do_resize=False)
+        self.image_processor = SegformerImageProcessor(
+            do_resize=False, do_normalize=True
+        )
         self.model.to(self.device)
         self.model.eval()
 
@@ -458,9 +504,9 @@ class SegFormerCellOnlyModel:
         preprocessed = self.image_processor.preprocess(cell_patch, return_tensors="pt")
         cell_patch = torch.tensor(preprocessed["pixel_values"])
 
-        mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
-        std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
-        cell_patch = (cell_patch - mean) / std
+        # mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+        # std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+        # cell_patch = (cell_patch - mean) / std
         cell_patch = cell_patch.to(self.device)
 
         output = self.model(cell_patch).logits.squeeze(0).detach().cpu()
