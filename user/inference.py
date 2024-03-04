@@ -59,7 +59,7 @@ class Deeplabv3CellOnlyModel:
         )
         self.model.load_state_dict(
             torch.load(
-                "outputs/models/20240223_194405_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_epochs-100.pth"
+                "outputs/models/20240228_151129_deeplabv3plus-cell-only_pretrained-1_lr-5e-05_dropout-0.3_backbone-resnet50_epochs-100.pth"
             )
         )
         self.model.eval()
@@ -174,7 +174,7 @@ class Deeplabv3TissueCellModel:
         )
         self.tissue_branch.load_state_dict(
             torch.load(
-                "outputs/models/20240223_195028_deeplabv3plus-tissue-branch_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_epochs-100.pth"
+                "outputs/models/20240303_205501_deeplabv3plus-tissue-branch_pretrained-1_lr-6e-05_dropout-0.1_backbone-resnet50_epochs-100.pth"
             )
         )
         self.tissue_branch.eval()
@@ -190,8 +190,8 @@ class Deeplabv3TissueCellModel:
         )
         self.cell_branch.load_state_dict(
             torch.load(
-                # "outputs/models/20240226_222357_deeplabv3plus-cell-branch_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_epochs-20.pth"
-                "outputs/models/20240223_194933_deeplabv3plus-cell-branch_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_epochs-100.pth"
+                "outputs/models/20240228_200511_deeplabv3plus-tissue-leaking_pretrained-1_lr-5e-05_dropout-0.3_backbone-resnet50_epochs-100.pth"
+                # "outputs/models/20240228_192603_deeplabv3plus-cell-branch_pretrained-1_lr-5e-05_dropout-0.3_backbone-resnet50_epochs-100.pth"
             )
         )
         self.cell_branch.eval()
@@ -342,8 +342,8 @@ class Deeplabv3TissueLeakingModel:
         )
         self.model.load_state_dict(
             torch.load(
-                # "outputs/models/20240223_195731_deeplabv3plus-tissue-leaking_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_epochs-100.pth"
-                "outputs/models/20240223_194933_deeplabv3plus-cell-branch_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_epochs-100.pth"
+                "outputs/models/20240228_192603_deeplabv3plus-cell-branch_pretrained-1_lr-5e-05_dropout-0.3_backbone-resnet50_epochs-100.pth"
+                # "outputs/models/20240228_200511_deeplabv3plus-tissue-leaking_pretrained-1_lr-5e-05_dropout-0.3_backbone-resnet50_epochs-100.pth"
             )
         )
         self.model.eval()
@@ -361,7 +361,7 @@ class Deeplabv3TissueLeakingModel:
         cell_patch: np.ndarray[uint8]
             Cell patch with shape [1024, 1024, 3] with values from 0 - 255
         tissue_patch: np.ndarray[uint8]
-            Tissue patch with shape [1024, 1024, 3] with values from 0 - 255
+            Tissue patch with shape [1024, 1024, 3] with values from 0 or 1
         pair_id: str
             Identification number of the patch pair
 
@@ -387,9 +387,7 @@ class Deeplabv3TissueLeakingModel:
         elif cell_patch.dtype != np.float32:
             cell_patch = cell_patch.astype(np.float32)
 
-        if tissue_patch.dtype == np.uint8:
-            tissue_patch = tissue_patch.astype(np.float32) / 255.0
-        elif tissue_patch.dtype != np.float32:
+        if tissue_patch.dtype != np.float32:
             tissue_patch = tissue_patch.astype(np.float32)
 
         cell_patch = torch.from_numpy(cell_patch).permute(2, 0, 1)
