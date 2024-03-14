@@ -1,16 +1,21 @@
 import os
+import sys
 import albumentations as A
 
 from pathlib import Path
 from util import gcio
 
-# from user.inference import Deeplabv3CellOnlyModel as Model
+sys.path.append(os.getcwd())
 
-from user.inference import Deeplabv3TissueCellModel as Model
+from user.inference import Deeplabv3CellOnlyModel as Model
+
+# from user.inference import Deeplabv3TissueCellModel as Model
 
 # from user.inference import SegFormerCellOnlyModel as Model
 
 from user.inference import Deeplabv3TissueLeakingModel
+
+from src.utils.constants import CELL_IMAGE_MEAN, CELL_IMAGE_STD
 
 DATA_DIR = "/cluster/projects/vc/data/mic/open/OCELOT/ocelot_data"
 
@@ -24,7 +29,7 @@ def process_model_output():
     tissue_leaking = False
 
     metadata_path = os.path.join(DATA_DIR, "metadata.json")
-    cell_path = os.path.join(DATA_DIR, f"images/{partition}/cell/")
+    cell_path = os.path.join(DATA_DIR, f"images/{partition}/cell_macenko/")
     output_path = Path(
         f"{os.getcwd()}/eval_outputs/cell_classification_{partition}.json"
     )
@@ -39,11 +44,13 @@ def process_model_output():
     # Getting the correct file locations depending on the model
     if tissue_leaking:
         additional_targets = {
-            "image": "image",
+            "image": "mask",
             "tissue": "mask",  # Don't apply normalization to tissue_patch
         }
         tissue_ending = ".png"
-        tissue_path = os.path.join(DATA_DIR, f"annotations/{partition}/cropped_tissue/")
+        tissue_path = os.path.join(
+            DATA_DIR, f"annotations/{partition}/predicted_cropped_tissue/"
+        )
         model = Deeplabv3TissueLeakingModel(meta_dataset)
     else:
         additional_targets = {
@@ -51,7 +58,7 @@ def process_model_output():
             "tissue": "image",
         }
         tissue_ending = ".jpg"
-        tissue_path = os.path.join(DATA_DIR, f"images/{partition}/tissue/")
+        tissue_path = os.path.join(DATA_DIR, f"images/{partition}/tissue_macenko/")
         model = Model(meta_dataset)
 
     # Creating transforms and loader
@@ -73,7 +80,7 @@ def process_model_output():
             cell_patch,
             tissue_patch,
             pair_id,
-            transform=transforms,  # Comment this out to remove statistical normalization :)
+            transform=transforms,
         )
 
         # Updating predictions

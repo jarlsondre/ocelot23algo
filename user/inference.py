@@ -9,7 +9,8 @@ from torch.nn.functional import softmax, interpolate
 sys.path.append(os.getcwd())
 
 from src.models import DeepLabV3plusModel
-from src.utils.utils import crop_and_resize_tissue_patch
+from src.utils.utils import crop_and_resize_tissue_patch, get_point_predictions
+from src.utils.constants import CELL_IMAGE_MEAN, CELL_IMAGE_STD
 
 from skimage.feature import peak_local_max
 from transformers import (
@@ -59,7 +60,42 @@ class Deeplabv3CellOnlyModel:
         )
         self.model.load_state_dict(
             torch.load(
-                "outputs/models/20240228_151129_deeplabv3plus-cell-only_pretrained-1_lr-5e-05_dropout-0.3_backbone-resnet50_epochs-100.pth"
+                # Normalization off
+                # "outputs/models/20240312_030603_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-off_id-1_best.pth"
+                # "outputs/models/20240312_030603_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-off_id-2_best.pth"
+                # "outputs/models/20240312_030609_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-off_id-3_best.pth"
+                # "outputs/models/20240312_031531_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-off_id-4_best.pth"
+                # "outputs/models/20240312_031531_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-off_id-5_best.pth"
+                # ImageNet Normalization
+                # "outputs/models/20240312_031531_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-imagenet_id-1_best.pth"
+                # "outputs/models/20240312_031531_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-imagenet_id-2_best.pth"
+                # "outputs/models/20240312_031531_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-imagenet_id-3_best.pth"
+                # "outputs/models/20240312_031530_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-imagenet_id-4_best.pth"
+                # "outputs/models/20240312_074706_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-imagenet_id-5_best.pth"
+                # Cell Normalization
+                # "outputs/models/20240312_094820_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-cell_id-1_best.pth"
+                # "outputs/models/20240312_143840_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-cell_id-2_best.pth"
+                # "outputs/models/20240312_150435_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-cell_id-3_best.pth"
+                # "outputs/models/20240312_164425_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-cell_id-4_best.pth"
+                # "outputs/models/20240312_165437_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-cell_id-5_best.pth"
+                # Macenko Normalization
+                # "outputs/models/20240312_181739_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-macenko_id-1_best.pth"
+                # "outputs/models/20240312_184334_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-macenko_id-2_best.pth"
+                # "outputs/models/20240312_185942_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-macenko_id-3_best.pth"
+                # "outputs/models/20240312_190612_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-macenko_id-4_best.pth"
+                # "outputs/models/20240312_205029_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-macenko_id-5_best.pth"
+                # Macenko + Cell
+                # "outputs/models/20240312_205029_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-macenko + cell_id-1_best.pth"
+                # "outputs/models/20240312_205029_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-macenko + cell_id-2_best.pth"
+                # "outputs/models/20240312_205029_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-macenko + cell_id-3_best.pth"
+                # "outputs/models/20240312_210030_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-macenko + cell_id-4_best.pth"
+                # "outputs/models/20240312_212404_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-macenko + cell_id-5_best.pth"
+                # Macenko + ImageNet
+                # "outputs/models/20240312_212404_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-macenko + imagenet_id-1_best.pth"
+                # "outputs/models/20240312_214124_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-macenko + imagenet_id-2_best.pth"
+                # "outputs/models/20240312_215531_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-macenko + imagenet_id-3_best.pth"
+                # "outputs/models/20240312_215531_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-macenko + imagenet_id-4_best.pth"
+                "outputs/models/20240312_215531_deeplabv3plus-cell-only_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-macenko + imagenet_id-5_best.pth"
             )
         )
         self.model.eval()
@@ -110,42 +146,8 @@ class Deeplabv3CellOnlyModel:
         # Getting model output and processing
         output = self.model(cell_patch).squeeze(0).detach().cpu()
         softmaxed = softmax(output, dim=0)
-
-        # max values and indices
-        confidences, predictions = torch.max(softmaxed, dim=0)
-        confidences, predictions = confidences.numpy(), predictions.numpy()
-        peak_points_pred = peak_local_max(
-            confidences,
-            min_distance=20,
-            labels=np.logical_or(predictions == 1, predictions == 2),
-            threshold_abs=0.01,
-        )
-        xs = []
-        ys = []
-        probs = []
-        ids = []
-        for x, y in peak_points_pred:
-            probability = confidences[x, y]
-            class_id = predictions[x, y]
-            if class_id == 2:
-                class_id = 1
-            elif class_id == 1:
-                class_id = 2
-            xs.append(y.item())
-            ys.append(x.item())
-            probs.append(probability.item())
-            ids.append(class_id)
-
-        #############################################
-        ####### RETURN RESULS PER SAMPLE ############
-        #############################################
-
-        # We need to return a list of tuples with 4 elements, i.e.:
-        # - int: cell's x-coordinate in the cell patch
-        # - int: cell's y-coordinate in the cell patch
-        # - int: class id of the cell, either 1 (BC) or 2 (TC)
-        # - float: confidence score of the predicted cell
-        return list(zip(xs, ys, ids, probs))
+        result = get_point_predictions(softmaxed)
+        return result
 
 
 class Deeplabv3TissueCellModel:
@@ -174,7 +176,9 @@ class Deeplabv3TissueCellModel:
         )
         self.tissue_branch.load_state_dict(
             torch.load(
-                "outputs/models/20240303_205501_deeplabv3plus-tissue-branch_pretrained-1_lr-6e-05_dropout-0.1_backbone-resnet50_epochs-100.pth"
+                # "outputs/models/20240303_205501_deeplabv3plus-tissue-branch_pretrained-1_lr-6e-05_dropout-0.1_backbone-resnet50_epochs-100.pth"
+                # "outputs/models/best/20240313_002829_deeplabv3plus-tissue-branch_pretrained-1_lr-1e-04_dropout-0.1_backbone-resnet50_normalization-macenko_id-5_best.pth"
+                "outputs/models/best/20240313_014914_deeplabv3plus-tissue-branch_pretrained-1_lr-1e-04_dropout-0.1_backbone-resnet50_normalization-macenko + imagenet_id-3_best.pth"
             )
         )
         self.tissue_branch.eval()
@@ -190,8 +194,10 @@ class Deeplabv3TissueCellModel:
         )
         self.cell_branch.load_state_dict(
             torch.load(
-                "outputs/models/20240228_200511_deeplabv3plus-tissue-leaking_pretrained-1_lr-5e-05_dropout-0.3_backbone-resnet50_epochs-100.pth"
+                # "outputs/models/20240228_200511_deeplabv3plus-tissue-leaking_pretrained-1_lr-5e-05_dropout-0.3_backbone-resnet50_epochs-100.pth"
                 # "outputs/models/20240228_192603_deeplabv3plus-cell-branch_pretrained-1_lr-5e-05_dropout-0.3_backbone-resnet50_epochs-100.pth"
+                # "outputs/models/20240305_162509_deeplabv3plus-cell-branch_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_epochs-100.pth"
+                "outputs/models/best/20240314_090119_deeplabv3plus-cell-branch_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-macenko_and_imagenet_id-1_best.pth"
             )
         )
         self.cell_branch.eval()
@@ -261,8 +267,6 @@ class Deeplabv3TissueCellModel:
             cell_mpp=cell_mpp,
             x_offset=x_offset,
             y_offset=y_offset,
-            input_height=1024,
-            input_width=1024,
         )
 
         tissue_prediction = F.one_hot(cropped_tissue, num_classes=3).permute(2, 0, 1)
@@ -279,42 +283,8 @@ class Deeplabv3TissueCellModel:
         # Getting prediction
         cell_prediction = self.cell_branch(model_input).squeeze(0).detach().cpu()
         softmaxed = softmax(cell_prediction, dim=0)
-
-        # max values and indices
-        confidences, predictions = torch.max(softmaxed, dim=0)
-        confidences, predictions = confidences.numpy(), predictions.numpy()
-        peak_points_pred = peak_local_max(
-            confidences,
-            min_distance=20,
-            labels=np.logical_or(predictions == 1, predictions == 2),
-            threshold_abs=0.01,
-        )
-        xs = []
-        ys = []
-        probs = []
-        ids = []
-        for x, y in peak_points_pred:
-            probability = confidences[x, y]
-            class_id = predictions[x, y]
-            if class_id == 2:
-                class_id = 1
-            elif class_id == 1:
-                class_id = 2
-            xs.append(y.item())
-            ys.append(x.item())
-            probs.append(probability.item())
-            ids.append(class_id)
-
-        #############################################
-        ####### RETURN RESULS PER SAMPLE ############
-        #############################################
-
-        # We need to return a list of tuples with 4 elements, i.e.:
-        # - int: cell's x-coordinate in the cell patch
-        # - int: cell's y-coordinate in the cell patch
-        # - int: class id of the cell, either 1 (BC) or 2 (TC)
-        # - float: confidence score of the predicted cell
-        return list(zip(xs, ys, ids, probs))
+        result = get_point_predictions(softmaxed)
+        return result
 
 
 class Deeplabv3TissueLeakingModel:
@@ -342,14 +312,17 @@ class Deeplabv3TissueLeakingModel:
         )
         self.model.load_state_dict(
             torch.load(
-                "outputs/models/20240228_192603_deeplabv3plus-cell-branch_pretrained-1_lr-5e-05_dropout-0.3_backbone-resnet50_epochs-100.pth"
+                # "outputs/models/20240228_192603_deeplabv3plus-cell-branch_pretrained-1_lr-5e-05_dropout-0.3_backbone-resnet50_epochs-100.pth"
                 # "outputs/models/20240228_200511_deeplabv3plus-tissue-leaking_pretrained-1_lr-5e-05_dropout-0.3_backbone-resnet50_epochs-100.pth"
+                # "outputs/models/best/20240314_090119_deeplabv3plus-cell-branch_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-macenko_and_imagenet_id-1_best.pth"
+                # "outputs/models/best/20240314_163849_deeplabv3plus-cell-branch_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-macenko_id-1_best.pth"
+                "outputs/models/20240314_163849_deeplabv3plus-cell-branch_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-macenko_id-1_epochs-60.pth"
             )
         )
         self.model.eval()
         self.model.to(self.device)
 
-    def __call__(self, cell_patch, tissue_patch, pair_id, transform=None):
+    def __call__(self, cell_patch, tissue_patch, pair_id, transform=None) -> list:
         """This function detects the cells in the cell patch. Additionally
         the broader tissue context is provided.
 
@@ -401,42 +374,8 @@ class Deeplabv3TissueLeakingModel:
 
         cell_prediction = self.model(model_input).squeeze(0).detach().cpu()
         softmaxed = softmax(cell_prediction, dim=0)
-
-        # max values and indices
-        confidences, predictions = torch.max(softmaxed, dim=0)
-        confidences, predictions = confidences.numpy(), predictions.numpy()
-        peak_points_pred = peak_local_max(
-            confidences,
-            min_distance=20,
-            labels=np.logical_or(predictions == 1, predictions == 2),
-            threshold_abs=0.01,
-        )
-        xs = []
-        ys = []
-        probs = []
-        ids = []
-        for x, y in peak_points_pred:
-            probability = confidences[x, y]
-            class_id = predictions[x, y]
-            if class_id == 2:
-                class_id = 1
-            elif class_id == 1:
-                class_id = 2
-            xs.append(y.item())
-            ys.append(x.item())
-            probs.append(probability.item())
-            ids.append(class_id)
-
-        #############################################
-        ####### RETURN RESULS PER SAMPLE ############
-        #############################################
-
-        # We need to return a list of tuples with 4 elements, i.e.:
-        # - int: cell's x-coordinate in the cell patch
-        # - int: cell's y-coordinate in the cell patch
-        # - int: class id of the cell, either 1 (BC) or 2 (TC)
-        # - float: confidence score of the predicted cell
-        return list(zip(xs, ys, ids, probs))
+        result = get_point_predictions(softmaxed)
+        return result
 
 
 class SegFormerCellOnlyModel:
@@ -516,39 +455,5 @@ class SegFormerCellOnlyModel:
         )
         output = output.squeeze(0)
         softmaxed = softmax(output, dim=0)
-
-        # max values and indices
-        confidences, predictions = torch.max(softmaxed, dim=0)
-        confidences, predictions = confidences.numpy(), predictions.numpy()
-        peak_points_pred = peak_local_max(
-            confidences,
-            min_distance=20,
-            labels=np.logical_or(predictions == 1, predictions == 2),
-            threshold_abs=0.01,
-        )
-        xs = []
-        ys = []
-        probs = []
-        ids = []
-        for x, y in peak_points_pred:
-            probability = confidences[x, y]
-            class_id = predictions[x, y]
-            if class_id == 2:
-                class_id = 1
-            elif class_id == 1:
-                class_id = 2
-            xs.append(y.item())
-            ys.append(x.item())
-            probs.append(probability.item())
-            ids.append(class_id)
-
-        #############################################
-        ####### RETURN RESULS PER SAMPLE ############
-        #############################################
-
-        # We need to return a list of tuples with 4 elements, i.e.:
-        # - int: cell's x-coordinate in the cell patch
-        # - int: cell's y-coordinate in the cell patch
-        # - int: class id of the cell, either 1 (BC) or 2 (TC)
-        # - float: confidence score of the predicted cell
-        return list(zip(xs, ys, ids, probs))
+        result = get_point_predictions(softmaxed)
+        return result
