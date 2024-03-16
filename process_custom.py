@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import albumentations as A
 
 from pathlib import Path
@@ -7,17 +8,15 @@ from util import gcio
 
 sys.path.append(os.getcwd())
 
-from user.inference import Deeplabv3CellOnlyModel as Model
+# from user.inference import Deeplabv3CellOnlyModel as Model
 
-# from user.inference import Deeplabv3TissueCellModel as Model
+from user.inference import Deeplabv3TissueCellModel as Model
 
 # from user.inference import SegFormerCellOnlyModel as Model
 
-from user.inference import Deeplabv3TissueLeakingModel
+# from user.inference import Deeplabv3TissueFromFile as Model
 
-from src.utils.constants import CELL_IMAGE_MEAN, CELL_IMAGE_STD
-
-DATA_DIR = "/cluster/projects/vc/data/mic/open/OCELOT/ocelot_data"
+from src.utils.constants import IDUN_OCELOT_DATA_PATH
 
 
 def process_model_output():
@@ -26,53 +25,54 @@ def process_model_output():
     """
     # Set this to "val" or "test"
     partition = "val"
-    tissue_leaking = False
+    tissue_from_file = False
 
-    metadata_path = os.path.join(DATA_DIR, "metadata.json")
-    cell_path = os.path.join(DATA_DIR, f"images/{partition}/cell_macenko/")
-    output_path = Path(
-        f"{os.getcwd()}/eval_outputs/cell_classification_{partition}.json"
+    offsets = {
+        "train": 0,
+        "val": 400,
+        "test": 537,
+    }
+
+    cell_model_path = "outputs/models/20240314_163849_deeplabv3plus-cell-branch_pretrained-1_lr-1e-04_dropout-0.3_backbone-resnet50_normalization-macenko_id-1_epochs-60.pth"
+    tissue_model_path = "outputs/models/best/20240313_002829_deeplabv3plus-tissue-branch_pretrained-1_lr-1e-04_dropout-0.1_backbone-resnet50_normalization-macenko_id-5_best.pth"
+    # tissue_model_path = None
+    cell_file_path = os.path.join(
+        IDUN_OCELOT_DATA_PATH, f"images/{partition}/cell_macenko/"
     )
 
     # Cell detection writer
-    writer = gcio.DetectionWriter(output_path)
+    prediction_output_path = Path(
+        f"{os.getcwd()}/eval_outputs/cell_classification_{partition}.json"
+    )
 
-    # Loading metadata
+    metadata_path = os.path.join(IDUN_OCELOT_DATA_PATH, "metadata.json")
     meta_dataset = gcio.read_json(metadata_path)
-    meta_dataset = list(meta_dataset["sample_pairs"].values())
+    meta_dataset = list(meta_dataset["sample_pairs"].values())[offsets[partition] :]
 
-    # Getting the correct file locations depending on the model
-    if tissue_leaking:
-        additional_targets = {
-            "image": "mask",
-            "tissue": "mask",  # Don't apply normalization to tissue_patch
-        }
-        tissue_ending = ".png"
+    # 'mask' means don't apply transform, 'image' means do apply
+    additional_targets = {
+        "image": "mask",
+        "tissue": "mask",
+    }
+    model = Model(meta_dataset, cell_model_path, tissue_model_path)
+
+    if tissue_from_file:
         tissue_path = os.path.join(
-            DATA_DIR, f"annotations/{partition}/predicted_cropped_tissue/"
+            IDUN_OCELOT_DATA_PATH, f"annotations/{partition}/predicted_cropped_tissue/"
         )
-        model = Deeplabv3TissueLeakingModel(meta_dataset)
     else:
-        additional_targets = {
-            "image": "image",
-            "tissue": "image",
-        }
-        tissue_ending = ".jpg"
-        tissue_path = os.path.join(DATA_DIR, f"images/{partition}/tissue_macenko/")
-        model = Model(meta_dataset)
+        tissue_path = os.path.join(
+            IDUN_OCELOT_DATA_PATH, f"images/{partition}/tissue_macenko/"
+        )
 
-    # Creating transforms and loader
-    transforms = A.Compose(
-        [A.Normalize()],
-        additional_targets=additional_targets,
-    )
-    loader = gcio.CustomDataLoader(
-        cell_path,
-        tissue_path,
-        tissue_ending=tissue_ending,
-    )
+    transforms = A.Compose([A.Normalize()], additional_targets=additional_targets)
+    loader = gcio.CustomDataLoader(cell_file_path, tissue_path)
 
-    # NOTE: Batch size is 1
+    pred_data = {
+        "type": "Multiple points",
+        "points": [],
+        "version": {"major": 1, "minor": 0},
+    }
     for cell_patch, tissue_patch, pair_id in loader:
         print(f"Processing sample pair {pair_id}")
         # Cell-tissue patch pair inference
@@ -84,10 +84,21 @@ def process_model_output():
         )
 
         # Updating predictions
-        writer.add_points(cell_classification, pair_id)
+        # writer.add_points(cell_classification, pair_id)
+        for x, y, c, prob in cell_classification:
+            pred_data["points"].append(
+                {
+                    "name": f"image_{str(pair_id)}",
+                    "point": [int(x), int(y), int(c)],
+                    "probability": prob,
+                }
+            )
 
     # Export the prediction into a json file
-    writer.save()
+    # writer.save()
+    with open(prediction_output_path, "w", encoding="utf-8") as f:
+        json.dump(pred_data, f, ensure_ascii=False, indent=4)
+    print(f"Saved predictions to {prediction_output_path}")
 
 
 if __name__ == "__main__":

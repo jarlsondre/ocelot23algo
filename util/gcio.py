@@ -8,7 +8,7 @@ from pathlib import Path
 from PIL import Image
 from typing import List
 
-from util.constants import SAMPLE_SHAPE
+from .constants import SAMPLE_SHAPE
 
 
 def read_json(fpath: Path) -> dict:
@@ -34,17 +34,13 @@ class CustomDataLoader:
     custom to our use-case
     """
 
-    def __init__(self, cell_path, tissue_path, tissue_ending: str = ".jpg"):
+    def __init__(self, cell_path, tissue_path):
         self.cell_patches = sorted(
-            [os.path.join(cell_path, f) for f in os.listdir(cell_path) if ".jpg" in f],
+            [os.path.join(cell_path, f) for f in os.listdir(cell_path)],
             key=lambda x: int(x.split("/")[-1].split(".")[0]),
         )
         self.tissue_patches = sorted(
-            [
-                os.path.join(tissue_path, f)
-                for f in os.listdir(tissue_path)
-                if tissue_ending in f
-            ],
+            [os.path.join(tissue_path, f) for f in os.listdir(tissue_path)],
             key=lambda x: int(x.split("/")[-1].split(".")[0]),
         )
 
@@ -54,6 +50,9 @@ class CustomDataLoader:
 
     def __iter__(self):
         return self
+
+    def __len__(self):
+        return len(self.cell_patches)
 
     def __next__(self):
         if not self.cur_idx < len(self.cell_patches):
