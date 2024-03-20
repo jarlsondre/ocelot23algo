@@ -8,15 +8,8 @@ from torch.nn.functional import softmax, interpolate
 
 sys.path.append(os.getcwd())
 
-from src.models import DeepLabV3plusModel
+from src.models import DeepLabV3plusModel, CustomSegformerModel
 from src.utils.utils import crop_and_resize_tissue_patch, get_point_predictions
-
-from transformers import (
-    SegformerForSemanticSegmentation,
-    SegformerConfig,
-    SegformerImageProcessor,
-)
-
 
 def validate_inputs(cell_patch: np.ndarray, tissue_patch: np.ndarray) -> None:
     if not (cell_patch.shape == (1024, 1024, 3)):
@@ -100,7 +93,6 @@ class Deeplabv3CellOnlyModel:
         softmaxed = softmax(output, dim=0)
         result = get_point_predictions(softmaxed)
         return result
-
 
 class Deeplabv3TissueCellModel:
     """
@@ -297,7 +289,7 @@ class Deeplabv3TissueFromFile:
         return result
 
 
-class SegFormerCellOnlyModel:
+class SegformerCellOnlyModel:
     """
     Parameters
     ----------
@@ -306,25 +298,24 @@ class SegFormerCellOnlyModel:
 
     """
 
-    def __init__(self, metadata, model_path: str):
+    def __init__(self, metadata, cell_model_path: str, tissue_model_path=None):
+        # Just to make it easier to swap models in the other file
+        assert tissue_model_path is None
+
         self.metadata = metadata
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        configuration = SegformerConfig(
-            num_labels=3,
-            num_channels=3,
-            depths=[3, 4, 18, 3],  # MiT-b3
-            hidden_sizes=[64, 128, 320, 512],
-            decoder_hidden_size=768,
-        )
-        self.model = SegformerForSemanticSegmentation(configuration)
-        self.model.load_state_dict(torch.load(model_path))
-        self.image_processor = SegformerImageProcessor(
-            do_resize=False, do_normalize=True
-        )
-        self.model.to(self.device)
-        self.model.eval()
+        backbone_model = "b3"
 
-    def __call__(self, cell_patch, tissue_patch, pair_id):
+        self.model = CustomSegformerModel(
+            backbone_name=backbone_model,
+            num_classes=3,
+            num_channels=3,
+        )
+        self.model.load_state_dict(torch.load(cell_model_path))
+        self.model.eval()
+        self.model.to(self.device)
+
+    def __call__(self, cell_patch, tissue_patch, pair_id, transform=None):
         """This function detects the cells in the cell patch. Additionally
         the broader tissue context is provided.
 
@@ -341,27 +332,23 @@ class SegFormerCellOnlyModel:
         -------
             List[tuple]: for each predicted cell we provide the tuple (x, y, cls, score)
         """
-        # Getting the metadata corresponding to the patch pair ID
-        meta_pair = self.metadata[pair_id]
+        validate_inputs(cell_patch, tissue_patch)
+        if transform:
+            transformed = transform(image=cell_patch)
+            cell_patch = transformed["image"]
 
-        # Values are expected to be in the range [0, 255] for image_processor
-        cell_patch = torch.tensor(cell_patch).permute(2, 0, 1).to(torch.uint8)
-        preprocessed = self.image_processor.preprocess(cell_patch, return_tensors="pt")
-        cell_patch = torch.tensor(preprocessed["pixel_values"])
+        # Scaling to [0, 1] if needed
+        if cell_patch.dtype == np.uint8:
+            cell_patch = cell_patch.astype(np.float32) / 255.0
+        elif cell_patch.dtype != np.float32:
+            cell_patch = cell_patch.astype(np.float32)
 
-        # mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
-        # std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
-        # cell_patch = (cell_patch - mean) / std
-        cell_patch = cell_patch.to(self.device)
+        # Preparing shape and device for model input
+        cell_patch = torch.from_numpy(cell_patch).permute(2, 0, 1)
+        cell_patch = cell_patch.unsqueeze(0).to(self.device)
 
-        output = self.model(cell_patch).logits.squeeze(0).detach().cpu()
-        output = interpolate(
-            output.unsqueeze(0),
-            size=cell_patch.shape[-2:],
-            mode="bilinear",
-            align_corners=False,
-        )
-        output = output.squeeze(0)
+        # Getting model output and processing
+        output = self.model(cell_patch).squeeze(0).detach().cpu()
         softmaxed = softmax(output, dim=0)
         result = get_point_predictions(softmaxed)
         return result
