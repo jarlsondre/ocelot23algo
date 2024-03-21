@@ -352,3 +352,78 @@ class SegformerCellOnlyModel:
         softmaxed = softmax(output, dim=0)
         result = get_point_predictions(softmaxed)
         return result
+
+
+class SegformerTissueFromFile:
+    """
+    Tissue fetched from file
+
+    Parameters
+    ----------
+    metadata: Dict
+        Dataset metadata in case you wish to compute statistics
+
+    """
+
+    def __init__(self, metadata, cell_model_path: str, tissue_model_path=None):
+
+        assert tissue_model_path is None
+
+        self.metadata = metadata
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        backbone_model = "b3"
+
+        self.model = CustomSegformerModel(
+            backbone_name=backbone_model,
+            num_classes=3,
+            num_channels=6,
+        )
+        self.model.load_state_dict(torch.load(cell_model_path))
+        self.model.eval()
+        self.model.to(self.device)
+
+    def __call__(self, cell_patch, tissue_patch, pair_id, transform=None) -> list:
+        """This function detects the cells in the cell patch. Additionally
+        the broader tissue context is provided.
+
+        Parameters
+        ----------
+        cell_patch: np.ndarray[uint8]
+            Cell patch with shape [1024, 1024, 3] with values from 0 - 255
+        tissue_patch: np.ndarray[uint8]
+            Tissue patch with shape [1024, 1024, 3] with values in {0, 1}
+        pair_id: str
+            Identification number of the patch pair
+
+        Returns
+        -------
+            List[tuple]: for each predicted cell we provide the tuple (x, y, cls, score)
+        """
+        # Getting the metadata corresponding to the patch pair ID
+        validate_inputs(cell_patch, tissue_patch)
+        if transform:
+            transformed = transform(image=cell_patch, tissue=tissue_patch)
+            cell_patch = transformed["image"]
+            tissue_patch = transformed["tissue"]
+
+        # Making sure the range is [0, 1] if no
+        if cell_patch.dtype == np.uint8:
+            cell_patch = cell_patch.astype(np.float32) / 255.0
+        elif cell_patch.dtype != np.float32:
+            cell_patch = cell_patch.astype(np.float32)
+
+        if tissue_patch.dtype != np.float32:
+            tissue_patch = tissue_patch.astype(np.float32)
+
+        cell_patch = torch.from_numpy(cell_patch).permute(2, 0, 1)
+        cell_patch = cell_patch.unsqueeze(0).to(self.device)
+
+        tissue_patch = torch.from_numpy(tissue_patch).permute(2, 0, 1)
+        tissue_patch = tissue_patch.unsqueeze(0).to(self.device)
+
+        model_input = torch.cat([cell_patch, tissue_patch], dim=1)
+
+        cell_prediction = self.model(model_input).squeeze(0).detach().cpu()
+        softmaxed = softmax(cell_prediction, dim=0)
+        result = get_point_predictions(softmaxed)
+        return result
