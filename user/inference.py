@@ -1,15 +1,18 @@
 import os
 import sys
-import torch
 import numpy as np
+import torch
+import torch.nn as nn
 import torch.nn.functional as F
 
 from torch.nn.functional import softmax, interpolate
+from typing import Dict, List, Union, Optional
 
 sys.path.append(os.getcwd())
 
 from src.models import DeepLabV3plusModel, CustomSegformerModel
 from src.utils.utils import crop_and_resize_tissue_patch, get_point_predictions
+
 
 def validate_inputs(cell_patch: np.ndarray, tissue_patch: np.ndarray) -> None:
     if not (cell_patch.shape == (1024, 1024, 3)):
@@ -35,8 +38,13 @@ class Deeplabv3CellOnlyModel:
 
     """
 
-    def __init__(self, metadata, cell_model_path: str, tissue_model_path=None):
-        # Just to make it easier to swap models in the other file
+    def __init__(
+        self,
+        metadata: Dict,
+        cell_model: Union[str, nn.Module],
+        tissue_model_path: Optional[str] = None,
+    ):
+
         assert tissue_model_path is None
 
         self.metadata = metadata
@@ -45,14 +53,21 @@ class Deeplabv3CellOnlyModel:
         dropout_rate = 0.3
         pretrained_backbone = True
 
-        self.model = DeepLabV3plusModel(
-            backbone_name=backbone_model,
-            num_classes=3,
-            num_channels=3,
-            pretrained=pretrained_backbone,
-            dropout_rate=dropout_rate,
-        )
-        self.model.load_state_dict(torch.load(cell_model_path))
+        self.model: nn.Module
+        if isinstance(cell_model, str):
+            self.model = DeepLabV3plusModel(
+                backbone_name=backbone_model,
+                num_classes=3,
+                num_channels=3,
+                pretrained=pretrained_backbone,
+                dropout_rate=dropout_rate,
+            )
+            self.model.load_state_dict(torch.load(cell_model))
+        elif isinstance(cell_model, torch.nn.Module):
+            self.model = cell_model
+        else:
+            raise ValueError("Invalid cell model type")
+
         self.model.eval()
         self.model.to(self.device)
 
@@ -94,6 +109,7 @@ class Deeplabv3CellOnlyModel:
         result = get_point_predictions(softmaxed)
         return result
 
+
 class Deeplabv3TissueCellModel:
     """
     Parameters
@@ -103,7 +119,9 @@ class Deeplabv3TissueCellModel:
 
     """
 
-    def __init__(self, metadata, cell_model_path: str, tissue_model_path: str):
+    def __init__(
+        self, metadata: List, cell_model: Union[str, nn.Module], tissue_model_path: str
+    ):
         self.metadata = metadata
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         backbone_model = "resnet50"
@@ -123,28 +141,40 @@ class Deeplabv3TissueCellModel:
         self.tissue_branch.to(self.device)
 
         # Create cell branch
-        self.cell_branch = DeepLabV3plusModel(
-            backbone_name=backbone_model,
-            num_classes=3,
-            num_channels=6,
-            pretrained=pretrained_backbone,
-            dropout_rate=dropout_rate,
-        )
-        self.cell_branch.load_state_dict(torch.load(cell_model_path))
+        self.cell_branch: nn.Module
+        if isinstance(cell_model, str):
+            self.cell_branch = DeepLabV3plusModel(
+                backbone_name=backbone_model,
+                num_classes=3,
+                num_channels=6,
+                pretrained=pretrained_backbone,
+                dropout_rate=dropout_rate,
+            )
+            self.cell_branch.load_state_dict(torch.load(cell_model))
+        elif isinstance(cell_model, torch.nn.Module):
+            self.cell_branch = cell_model
+        else:
+            raise ValueError("Invalid cell model type")
         self.cell_branch.eval()
         self.cell_branch.to(self.device)
 
-    def __call__(self, cell_patch, tissue_patch, pair_id, transform=None):
+    def __call__(
+        self,
+        cell_patch: np.ndarray,
+        tissue_patch: np.ndarray,
+        pair_id: int,
+        transform=None,
+    ):
         """This function detects the cells in the cell patch. Additionally
         the broader tissue context is provided.
 
         Parameters
         ----------
-        cell_patch: np.ndarray[uint8]
+        cell_patch:
             Cell patch with shape [1024, 1024, 3] with values from 0 - 255
-        tissue_patch: np.ndarray[uint8]
+        tissue_patch:
             Tissue patch with shape [1024, 1024, 3] with values from 0 - 255
-        pair_id: str
+        pair_id:
             Identification number of the patch pair
 
         Returns
@@ -356,29 +386,41 @@ class SegformerCellOnlyModel:
 
 class SegformerTissueFromFile:
     """
-    Tissue fetched from file
+    A Segformer evaluate model that uses tissue images from file and cell images
+    from the input.
 
-    Parameters
-    ----------
-    metadata: Dict
-        Dataset metadata in case you wish to compute statistics
-
+    Args:
+        metadata: A dictionary containing metadata about the dataset.
+        cell_model: A path to the pre-trained model (str) or a pre-loaded PyTorch model (Module).
+                    The model is used for cell segmentation within tissue images.
+        tissue_model_path: Not used for this model, must be None
     """
 
-    def __init__(self, metadata, cell_model_path: str, tissue_model_path=None):
-
+    def __init__(
+        self,
+        metadata: Dict,
+        cell_model: Union[str, nn.Module],
+        tissue_model_path: Optional[str] = None,
+    ):
         assert tissue_model_path is None
 
         self.metadata = metadata
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         backbone_model = "b3"
 
-        self.model = CustomSegformerModel(
-            backbone_name=backbone_model,
-            num_classes=3,
-            num_channels=6,
-        )
-        self.model.load_state_dict(torch.load(cell_model_path))
+        self.model: nn.Module
+        if isinstance(cell_model, str):
+            self.model = CustomSegformerModel(
+                backbone_name=backbone_model,
+                num_classes=3,
+                num_channels=6,
+            )
+            self.model.load_state_dict(torch.load(cell_model))
+        elif isinstance(cell_model, torch.nn.Module):
+            self.model = cell_model
+        else:
+            raise ValueError("Invalid cell model type")
+
         self.model.eval()
         self.model.to(self.device)
 
