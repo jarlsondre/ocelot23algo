@@ -370,7 +370,7 @@ class SegformerTissueFromFile(EvaluationModel):
 
         """
         self.validate_inputs(cell_patch, tissue_patch)
-        if transform:
+        if transform is not None:
             transformed = transform(image=cell_patch, tissue=tissue_patch)
             cell_patch = transformed["image"]
             tissue_patch = transformed["tissue"]
