@@ -386,7 +386,7 @@ class SegformerTissueFromFile(EvaluationModel):
 
         model_input = torch.cat([cell_patch, tissue_patch], dim=1)
 
-        cell_prediction = self.model(model_input).squeeze(0).detach().cpu()
-        softmaxed = softmax(cell_prediction, dim=0)
+        cell_prediction = self.model(model_input, (pair_id,)).squeeze(0).detach().cpu()
+        softmaxed = softmax(cell_prediction, dim=0)[:3]
         result = get_point_predictions(softmaxed)
         return result
