@@ -341,11 +341,11 @@ class SegformerCellOnlyModel(EvaluationModel):
 
 class SegformerTissueFromFile(EvaluationModel):
 
-    def __init__(self, metadata, cell_model, tissue_model_path=None):
+    def __init__(self, metadata, cell_model, device, tissue_model_path=None):
         assert tissue_model_path is None
 
         self.metadata = metadata
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = device
         backbone_model = "b3"
 
         if isinstance(cell_model, str):
