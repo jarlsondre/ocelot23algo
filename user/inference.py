@@ -386,6 +386,58 @@ class SegformerTissueFromFile(EvaluationModel):
 
         model_input = torch.cat([cell_patch, tissue_patch], dim=1)
 
+        cell_prediction = self.model(model_input).squeeze(0).detach().cpu()
+        softmaxed = softmax(cell_prediction, dim=0)
+        result = get_point_predictions(softmaxed)
+        return result
+
+class SegformerSharingTissueFromFile(EvaluationModel):
+
+    def __init__(self, metadata, cell_model, device, tissue_model_path=None):
+        assert tissue_model_path is None
+
+        self.metadata = metadata
+        self.device = device
+        backbone_model = "b3"
+
+        if isinstance(cell_model, str):
+            self.model = CustomSegformerModel(
+                backbone_name=backbone_model,
+                num_classes=3,
+                num_channels=6,
+            )
+            self.model.load_state_dict(torch.load(cell_model))
+        elif isinstance(cell_model, torch.nn.Module):
+            self.model = cell_model
+        else:
+            raise ValueError("Invalid cell model type")
+
+        self.model.eval()
+        self.model.to(self.device)
+
+    def __call__(self, cell_patch, tissue_patch, pair_id, transform=None) -> list:
+        """
+        Note:
+        - Expects tissue_patch to have values in {0, 1}
+
+        """
+        self.validate_inputs(cell_patch, tissue_patch)
+        if transform is not None:
+            transformed = transform(image=cell_patch, tissue=tissue_patch)
+            cell_patch = transformed["image"]
+            tissue_patch = transformed["tissue"]
+
+        cell_patch = self._scale_cell_patch(cell_patch)
+        tissue_patch = self._scale_tissue_patch(tissue_patch, do_scale=False)
+
+        cell_patch = torch.from_numpy(cell_patch).permute(2, 0, 1)
+        cell_patch = cell_patch.unsqueeze(0).to(self.device)
+
+        tissue_patch = torch.from_numpy(tissue_patch).permute(2, 0, 1)
+        tissue_patch = tissue_patch.unsqueeze(0).to(self.device)
+
+        model_input = torch.cat([cell_patch, tissue_patch], dim=1)
+
         cell_prediction = self.model(model_input, (pair_id,)).squeeze(0).detach().cpu()
         softmaxed = softmax(cell_prediction, dim=0)[:3]
         result = get_point_predictions(softmaxed)
