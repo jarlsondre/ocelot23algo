@@ -323,7 +323,7 @@ class SegformerCellOnlyModel(EvaluationModel):
     def __call__(self, cell_patch, tissue_patch, pair_id, transform=None):
         self.validate_inputs(cell_patch, tissue_patch)
         if transform is not None:
-            transformed = transform(image=cell_patch)
+            transformed = transform(image=cell_patch, mask=cell_patch)
             cell_patch = transformed["image"]
 
         cell_patch = self._scale_cell_patch(cell_patch)
@@ -390,6 +390,7 @@ class SegformerTissueFromFile(EvaluationModel):
         softmaxed = softmax(cell_prediction, dim=0)
         result = get_point_predictions(softmaxed)
         return result
+
 
 class SegformerSharingTissueFromFile(EvaluationModel):
 
