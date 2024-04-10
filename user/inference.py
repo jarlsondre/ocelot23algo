@@ -20,6 +20,8 @@ class EvaluationModel(ABC):
     metadata: Dict
     cell_model: nn.Module
     device: torch.device
+    backbone_model: Optional[str]
+    tissue_from_file: bool
 
     @abstractmethod
     def __init__(
@@ -27,8 +29,13 @@ class EvaluationModel(ABC):
         metadata: Dict,
         cell_model: Union[str, nn.Module],
         tissue_model_path: Optional[str] = None,
+        device: torch.device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu"
+        ),
     ) -> None:
-        pass
+        self.metadata = metadata
+        self.device = device
+        self.tissue_from_file = False
 
     @abstractmethod
     def __call__(self, cell_patch, tissue_patch, pair_id, transform=None) -> List:
@@ -77,8 +84,7 @@ class EvaluationModel(ABC):
 
         return tissue_patch
 
-    @staticmethod
-    def validate_inputs(cell_patch: np.ndarray, tissue_patch: np.ndarray) -> None:
+    def validate_inputs(self, cell_patch: np.ndarray, tissue_patch: np.ndarray) -> None:
         if not (cell_patch.shape == (1024, 1024, 3)):
             raise ValueError("Invalid shape for cell_patch")
         if not (tissue_patch.shape == (1024, 1024, 3)):
@@ -89,18 +95,27 @@ class EvaluationModel(ABC):
             raise ValueError("Invalid dtype for tissue_patch")
         if not (cell_patch.min() >= 0 and cell_patch.max() <= 255):
             raise ValueError("Invalid value range for cell_patch")
-        if not (tissue_patch.min() >= 0 and tissue_patch.max() <= 255):
-            raise ValueError("Invalid value range for tissue_patch")
+
+        if self.tissue_from_file:
+            # Must be in {0, 1}
+            if not (tissue_patch.min() in [0, 1] and tissue_patch.max() in [0, 1]):
+                raise ValueError("Invalid value range for tissue_patch, must be {0, 1}")
+        else:
+            # Must be [0, 255]
+            if not (tissue_patch.min() >= 0 and tissue_patch.max() <= 255):
+                raise ValueError(
+                    "Invalid value range for tissue_patch, must be [0, 255]"
+                )
 
 
 class Deeplabv3CellOnlyModel(EvaluationModel):
 
     def __init__(self, metadata, cell_model, tissue_model_path=None):
-        self.metadata = metadata
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        super().__init__(metadata, cell_model, tissue_model_path)
         backbone_model = "resnet50"
         dropout_rate = 0.3
         pretrained_backbone = True
+        self.tissue_from_file = False
 
         if isinstance(cell_model, str):
             self.model = DeepLabV3plusModel(
@@ -143,11 +158,11 @@ class Deeplabv3CellOnlyModel(EvaluationModel):
 class Deeplabv3TissueCellModel(EvaluationModel):
 
     def __init__(self, metadata, cell_model, tissue_model_path):
-        self.metadata = metadata
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        super().__init__(metadata, cell_model, tissue_model_path)
         backbone_model = "resnet50"
         dropout_rate = 0.3
         pretrained_backbone = True
+        self.tissue_from_file = False
 
         # Create tissue branch
         self.tissue_branch = DeepLabV3plusModel(
@@ -241,12 +256,11 @@ class Deeplabv3TissueFromFile(EvaluationModel):
 
     def __init__(self, metadata, cell_model, tissue_model_path=None):
         assert tissue_model_path is None
-
-        self.metadata = metadata
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        super().__init__(metadata, cell_model, tissue_model_path)
         backbone_model = "resnet50"
         dropout_rate = 0.3
         pretrained_backbone = True
+        self.tissue_from_file = True
 
         if isinstance(cell_model, str):
             self.model = DeepLabV3plusModel(
@@ -300,10 +314,9 @@ class SegformerCellOnlyModel(EvaluationModel):
     def __init__(self, metadata, cell_model, tissue_model_path=None):
         # Just to make it easier to swap models in the other file
         assert tissue_model_path is None
-
-        self.metadata = metadata
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        super().__init__(metadata, cell_model, tissue_model_path)
         backbone_model = "b3"
+        self.tissue_from_file = False
 
         if isinstance(cell_model, str):
             self.model = CustomSegformerModel(
@@ -341,12 +354,13 @@ class SegformerCellOnlyModel(EvaluationModel):
 
 class SegformerTissueFromFile(EvaluationModel):
 
-    def __init__(self, metadata, cell_model, device, tissue_model_path=None):
+    def __init__(
+        self, metadata, cell_model, tissue_model_path=None, device=torch.device("cuda")
+    ):
         assert tissue_model_path is None
-
-        self.metadata = metadata
-        self.device = device
+        super().__init__(metadata, cell_model, tissue_model_path, device=device)
         backbone_model = "b3"
+        self.tissue_from_file = True
 
         if isinstance(cell_model, str):
             self.model = CustomSegformerModel(
@@ -394,12 +408,13 @@ class SegformerTissueFromFile(EvaluationModel):
 
 class SegformerSharingTissueFromFile(EvaluationModel):
 
-    def __init__(self, metadata, cell_model, device, tissue_model_path=None):
+    def __init__(
+        self, metadata, cell_model, tissue_model_path=None, device=torch.device("cuda")
+    ):
         assert tissue_model_path is None
-
-        self.metadata = metadata
-        self.device = device
+        super().__init__(metadata, cell_model, tissue_model_path, device=device)
         backbone_model = "b3"
+        self.tissue_from_file = True
 
         if isinstance(cell_model, str):
             self.model = CustomSegformerModel(
