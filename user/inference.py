@@ -386,9 +386,11 @@ class SegformerTissueFromFile(EvaluationModel):
         """
         self.validate_inputs(cell_patch, tissue_patch)
         if transform is not None:
-            transformed = transform(image=cell_patch, mask2=tissue_patch, mask1=None)
+            transformed = transform(
+                image=cell_patch, tissue_prediction=tissue_patch, cell_label=None
+            )
             cell_patch = transformed["image"]
-            tissue_patch = transformed["mask2"]
+            tissue_patch = transformed["tissue_prediction"]
 
         cell_patch = self._scale_cell_patch(cell_patch)
         tissue_patch = self._scale_tissue_patch(tissue_patch, do_scale=False)
@@ -515,5 +517,6 @@ class SegformerSharingModel(EvaluationModel):
         cell_prediction, _ = self.model(model_input, offsets)
         cell_prediction = cell_prediction.squeeze(0).detach().cpu()
         softmaxed = softmax(cell_prediction, dim=0)
+
         result = get_point_predictions(softmaxed)
         return result
