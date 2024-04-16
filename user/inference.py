@@ -12,7 +12,7 @@ from typing import Dict, List, Union, Optional
 sys.path.append(os.getcwd())
 
 from src.models import DeepLabV3plusModel, CustomSegformerModel
-from src.models import SegformerSharingModel as SegformerSharingModule
+from src.models import SegformerSharingModel as SegformerSharingModule, SegformerSharingSumModel
 from src.utils.utils import crop_and_resize_tissue_patch, get_point_predictions
 
 
@@ -520,3 +520,24 @@ class SegformerSharingModel(EvaluationModel):
 
         result = get_point_predictions(softmaxed)
         return result
+
+
+class SegformerSharingSumModel(SegformerSharingModel):
+
+    def __init__(self, metadata, cell_model, tissue_model_path=None):
+        assert tissue_model_path is None
+        super().__init__(metadata, cell_model, tissue_model_path)
+        backbone_model = "b3"
+
+        if isinstance(cell_model, str):
+            self.model = SegformerSharingSumModel(
+                backbone_model=backbone_model,
+                pretrained_dataset="ade",
+                input_image_size=1024,
+                output_image_size=1024,
+            )
+            self.model.load_state_dict(torch.load(cell_model))
+        elif isinstance(cell_model, torch.nn.Module):
+            self.model = cell_model
+        else:
+            raise ValueError("Invalid model type ")
