@@ -59,6 +59,7 @@ class EvaluationModel(ABC):
         """
         pass
 
+    # TODO: This does exactly the same as the function below...
     def _scale_cell_patch(self, cell_patch: np.ndarray) -> np.ndarray:
         """
         Scales the cell_patch to [0, 1] if it is of type uint8, and converts
