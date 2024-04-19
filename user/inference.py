@@ -12,7 +12,7 @@ from typing import Dict, List, Union, Optional
 sys.path.append(os.getcwd())
 
 from src.models import DeepLabV3plusModel, CustomSegformerModel
-from src.models import SegformerSharingModel as SegformerSharingModule, SegformerSharingSumModel
+from src.models import SegformerSharingModel as SegformerSharingModule, SegformerTissueToCellDecoderModel
 from src.utils.utils import crop_and_resize_tissue_patch, get_point_predictions
 
 
@@ -523,7 +523,7 @@ class SegformerSharingModel(EvaluationModel):
         return result
 
 
-class SegformerSharingSumModel(SegformerSharingModel):
+class SegformerTissueToCellDecoderModel(SegformerSharingModel):
 
     def __init__(self, metadata, cell_model, tissue_model_path=None):
         assert tissue_model_path is None
@@ -531,7 +531,7 @@ class SegformerSharingSumModel(SegformerSharingModel):
         backbone_model = "b3"
 
         if isinstance(cell_model, str):
-            self.model = SegformerSharingSumModel(
+            self.model = SegformerTissueToCellDecoderModel(
                 backbone_model=backbone_model,
                 pretrained_dataset="ade",
                 input_image_size=1024,
