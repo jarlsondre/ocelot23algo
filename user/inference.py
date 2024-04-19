@@ -12,7 +12,7 @@ from typing import Dict, List, Union, Optional
 sys.path.append(os.getcwd())
 
 from src.models import DeepLabV3plusModel, CustomSegformerModel
-from src.models import SegformerSharingModel as SegformerSharingModule, SegformerTissueToCellDecoderModel
+from src.models import SegformerSharingModel as SegformerSharingModule, SegformerTissueToCellDecoderModel as SegformerTissueToCellDecoderModule
 from src.utils.utils import crop_and_resize_tissue_patch, get_point_predictions
 
 
@@ -531,7 +531,7 @@ class SegformerTissueToCellDecoderModel(SegformerSharingModel):
         backbone_model = "b3"
 
         if isinstance(cell_model, str):
-            self.model = SegformerTissueToCellDecoderModel(
+            self.model = SegformerTissueToCellDecoderModule(
                 backbone_model=backbone_model,
                 pretrained_dataset="ade",
                 input_image_size=1024,
