@@ -12,7 +12,10 @@ from typing import Dict, List, Union, Optional
 sys.path.append(os.getcwd())
 
 from src.models import DeepLabV3plusModel, CustomSegformerModel
-from src.models import SegformerSharingModel as SegformerSharingModule, SegformerTissueToCellDecoderModel as SegformerTissueToCellDecoderModule
+from src.models import (
+    SegformerSharingModel as SegformerSharingModule,
+    SegformerTissueToCellDecoderModel as SegformerTissueToCellDecoderModule,
+)
 from src.utils.utils import crop_and_resize_tissue_patch, get_point_predictions
 
 

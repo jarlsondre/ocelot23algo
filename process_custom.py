@@ -58,7 +58,7 @@ def process_model_output():
 
     if tissue_from_file:
         tissue_path = os.path.join(
-            IDUN_OCELOT_DATA_PATH, f"annotations/{partition}/predicted_cropped_tissue/"
+            IDUN_OCELOT_DATA_PATH, f"predictions/{partition}/cropped_tissue_deeplab/"
         )
     else:
         tissue_path = os.path.join(
