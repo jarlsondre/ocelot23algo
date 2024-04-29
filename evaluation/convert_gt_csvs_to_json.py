@@ -44,7 +44,7 @@ def main(dataset_root_path, subset):
             }
             gt_json["points"].append(point)
 
-    with open(f"/eval_outputs/cell_gt_{subset}.json", "w") as g:
+    with open(f"eval_outputs/cell_gt_{subset}.json", "w") as g:
         json.dump(gt_json, g)
         print(f"JSON file saved in {os.getcwd()}/cell_gt_{subset}.json")
 

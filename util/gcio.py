@@ -37,11 +37,11 @@ class CustomDataLoader:
     def __init__(self, cell_path, tissue_path):
         self.cell_patches = sorted(
             [os.path.join(cell_path, f) for f in os.listdir(cell_path)],
-            key=lambda x: int(x.split("/")[-1].split(".")[0]),
+            key=lambda x: int(os.path.basename(x).split(".")[0]),
         )
         self.tissue_patches = sorted(
             [os.path.join(tissue_path, f) for f in os.listdir(tissue_path)],
-            key=lambda x: int(x.split("/")[-1].split(".")[0]),
+            key=lambda x: int(os.path.basename(x).split(".")[0]),
         )
 
         assert len(self.cell_patches) == len(self.tissue_patches)
