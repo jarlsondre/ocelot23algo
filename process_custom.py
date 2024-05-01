@@ -19,7 +19,7 @@ from user.inference import Deeplabv3TissueCellModel as Model
 from src.utils.constants import IDUN_OCELOT_DATA_PATH
 
 
-def process_model_output():
+def process_model_output(data_dir: str = IDUN_OCELOT_DATA_PATH):
     """Process a test patches. This involves iterating over samples,
     inferring and write the cell predictions
     """
@@ -37,7 +37,7 @@ def process_model_output():
     tissue_model_path = "outputs/models/best/20240313_002829_deeplabv3plus-tissue-branch_pretrained-1_lr-1e-04_dropout-0.1_backbone-resnet50_normalization-macenko_id-5_best.pth"
     # tissue_model_path = None
     cell_file_path = os.path.join(
-        IDUN_OCELOT_DATA_PATH, f"images/{partition}/cell_macenko/"
+        data_dir, f"images/{partition}/cell_macenko/"
     )
 
     # Cell detection writer
@@ -45,7 +45,7 @@ def process_model_output():
         f"{os.getcwd()}/eval_outputs/cell_classification_{partition}.json"
     )
 
-    metadata_path = os.path.join(IDUN_OCELOT_DATA_PATH, "metadata.json")
+    metadata_path = os.path.join(data_dir, "metadata.json")
     meta_dataset = gcio.read_json(metadata_path)
     meta_dataset = list(meta_dataset["sample_pairs"].values())[offsets[partition] :]
 
@@ -58,11 +58,11 @@ def process_model_output():
 
     if tissue_from_file:
         tissue_path = os.path.join(
-            IDUN_OCELOT_DATA_PATH, f"predictions/{partition}/cropped_tissue_deeplab/"
+            data_dir, f"predictions/{partition}/cropped_tissue_deeplab/"
         )
     else:
         tissue_path = os.path.join(
-            IDUN_OCELOT_DATA_PATH, f"images/{partition}/tissue_macenko/"
+            data_dir, f"images/{partition}/tissue_macenko/"
         )
 
     transforms = A.Compose([A.Normalize()], additional_targets=additional_targets)

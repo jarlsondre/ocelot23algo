@@ -62,32 +62,19 @@ class EvaluationModel(ABC):
         """
         pass
 
-    # TODO: This does exactly the same as the function below...
-    def _scale_cell_patch(self, cell_patch: np.ndarray) -> np.ndarray:
-        """
-        Scales the cell_patch to [0, 1] if it is of type uint8, and converts
-        it to float32 if it is not already.
-        """
-        if cell_patch.dtype == np.uint8:
-            cell_patch = cell_patch.astype(np.float32) / 255.0
-        elif cell_patch.dtype != np.float32:
-            cell_patch = cell_patch.astype(np.float32)
-
-        return cell_patch
-
-    def _scale_tissue_patch(
-        self, tissue_patch: np.ndarray, do_scale: bool = True
+    def _scale_patch(
+        self, patch: np.ndarray, do_scale: bool = True
     ) -> np.ndarray:
         """
-        Scales the tissue_patch to [0, 1] if do_scale is true and if dtype is
+        Scales the to [0, 1] if do_scale is true and if dtype is
         uint8, and converts it to float32 if it is not already.
         """
-        if do_scale and tissue_patch.dtype == np.uint8:
-            tissue_patch = tissue_patch.astype(np.float32) / 255.0
-        elif tissue_patch.dtype != np.float32:
-            tissue_patch = tissue_patch.astype(np.float32)
+        if do_scale and patch.dtype == np.uint8:
+            patch = patch.astype(np.float32) / 255.0
+        elif patch.dtype != np.float32:
+            patch = patch.astype(np.float32)
 
-        return tissue_patch
+        return patch
 
     def validate_inputs(self, cell_patch: np.ndarray, tissue_patch: np.ndarray) -> None:
         if not (cell_patch.shape == (1024, 1024, 3)):
@@ -147,7 +134,7 @@ class Deeplabv3CellOnlyModel(EvaluationModel):
             transformed = transform(image=cell_patch)
             cell_patch = transformed["image"]
 
-        cell_patch = self._scale_cell_patch(cell_patch)
+        cell_patch = self._scale_patch(cell_patch)
 
         # Preparing shape and device for model input
         cell_patch = torch.from_numpy(cell_patch).permute(2, 0, 1)
@@ -218,8 +205,8 @@ class Deeplabv3TissueCellModel(EvaluationModel):
             tissue_patch = transformed["tissue"]
 
         # Scaling to [0, 1] if needed
-        cell_patch = self._scale_cell_patch(cell_patch)
-        tissue_patch = self._scale_tissue_patch(tissue_patch, do_scale=True)
+        cell_patch = self._scale_patch(cell_patch)
+        tissue_patch = self._scale_patch(tissue_patch, do_scale=True)
 
         # Preparing shape and device for model input
         tissue_patch: torch.Tensor
@@ -298,8 +285,8 @@ class Deeplabv3TissueFromFile(EvaluationModel):
             cell_patch = transformed["image"]
             tissue_patch = transformed["tissue"]
 
-        cell_patch = self._scale_cell_patch(cell_patch)
-        tissue_patch = self._scale_tissue_patch(tissue_patch, do_scale=False)
+        cell_patch = self._scale_patch(cell_patch)
+        tissue_patch = self._scale_patch(tissue_patch, do_scale=False)
 
         cell_patch = torch.from_numpy(cell_patch).permute(2, 0, 1)
         cell_patch = cell_patch.unsqueeze(0).to(self.device)
@@ -344,7 +331,7 @@ class SegformerCellOnlyModel(EvaluationModel):
             transformed = transform(image=cell_patch, mask=cell_patch)
             cell_patch = transformed["image"]
 
-        cell_patch = self._scale_cell_patch(cell_patch)
+        cell_patch = self._scale_patch(cell_patch)
 
         # Preparing shape and device for model input
         cell_patch = torch.from_numpy(cell_patch).permute(2, 0, 1)
@@ -396,8 +383,8 @@ class SegformerTissueFromFile(EvaluationModel):
             cell_patch = transformed["image"]
             tissue_patch = transformed["tissue_prediction"]
 
-        cell_patch = self._scale_cell_patch(cell_patch)
-        tissue_patch = self._scale_tissue_patch(tissue_patch, do_scale=False)
+        cell_patch = self._scale_patch(cell_patch)
+        tissue_patch = self._scale_patch(tissue_patch, do_scale=False)
 
         cell_patch = torch.from_numpy(cell_patch).permute(2, 0, 1)
         cell_patch = cell_patch.unsqueeze(0).to(self.device)
@@ -450,8 +437,8 @@ class SegformerSharingTissueFromFile(EvaluationModel):
             cell_patch = transformed["image"]
             tissue_patch = transformed["tissue"]
 
-        cell_patch = self._scale_cell_patch(cell_patch)
-        tissue_patch = self._scale_tissue_patch(tissue_patch, do_scale=False)
+        cell_patch = self._scale_patch(cell_patch)
+        tissue_patch = self._scale_patch(tissue_patch, do_scale=False)
 
         cell_patch = torch.from_numpy(cell_patch).permute(2, 0, 1)
         cell_patch = cell_patch.unsqueeze(0).to(self.device)
@@ -506,8 +493,8 @@ class SegformerSharingModel(EvaluationModel):
             cell_patch = transformed["cell_image"]
             tissue_patch = transformed["tissue_image"]
 
-        cell_patch = self._scale_cell_patch(cell_patch)
-        tissue_patch = self._scale_tissue_patch(tissue_patch, do_scale=True)
+        cell_patch = self._scale_patch(cell_patch)
+        tissue_patch = self._scale_patch(tissue_patch, do_scale=True)
 
         cell_patch = torch.from_numpy(cell_patch).permute(2, 0, 1)
         cell_patch = cell_patch.unsqueeze(0).to(self.device)
