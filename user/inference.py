@@ -13,7 +13,7 @@ sys.path.append(os.getcwd())
 
 from src.models import DeepLabV3plusModel, CustomSegformerModel
 from src.models import (
-    SegformerSharingModel as SegformerSharingModule,
+    SegformerJointPred2InputModel as SegformerSharingModule,
     SegformerTissueToCellDecoderModel as SegformerTissueToCellDecoderModule,
 )
 from src.utils.utils import crop_and_resize_tissue_patch, get_point_predictions
@@ -62,9 +62,7 @@ class EvaluationModel(ABC):
         """
         pass
 
-    def _scale_patch(
-        self, patch: np.ndarray, do_scale: bool = True
-    ) -> np.ndarray:
+    def _scale_patch(self, patch: np.ndarray, do_scale: bool = True) -> np.ndarray:
         """
         Scales the to [0, 1] if do_scale is true and if dtype is
         uint8, and converts it to float32 if it is not already.
@@ -454,12 +452,15 @@ class SegformerSharingTissueFromFile(EvaluationModel):
         return result
 
 
-class SegformerSharingModel(EvaluationModel):
+class SegformerJointPred2InputModel(EvaluationModel):
 
-    def __init__(self, metadata, cell_model, tissue_model_path=None):
-        assert tissue_model_path is None
-        super().__init__(metadata, cell_model, tissue_model_path)
+    def __init__(
+        self, metadata, cell_model, cell_transform=None, tissue_transform=None
+    ):
+        super().__init__(metadata, cell_model, None)
         backbone_model = "b3"
+        self.cell_transform = cell_transform
+        self.tissue_transform = tissue_transform
 
         if isinstance(cell_model, str):
             self.model = SegformerSharingModule(
@@ -483,15 +484,19 @@ class SegformerSharingModel(EvaluationModel):
         x_offset = meta_pair["patch_x_offset"]
         y_offset = meta_pair["patch_y_offset"]
 
-        if transform is not None:
-            transformed = transform(
-                cell_image=cell_patch,
-                tissue_image=tissue_patch,
-                cell_label=cell_patch,  # placeholder
-                tissue_label=cell_patch,  # placeholder
+        if self.cell_transform is not None:
+            cell_transformed = self.cell_transform(
+                image=cell_patch,
+                mask=cell_patch,
             )
-            cell_patch = transformed["cell_image"]
-            tissue_patch = transformed["tissue_image"]
+            cell_patch = cell_transformed["image"]
+
+        if self.tissue_transform is not None:
+            tissue_transformed = self.tissue_transform(
+                image=tissue_patch,
+                mask=tissue_patch,
+            )
+            tissue_patch = tissue_transformed["image"]
 
         cell_patch = self._scale_patch(cell_patch)
         tissue_patch = self._scale_patch(tissue_patch, do_scale=True)
@@ -513,7 +518,7 @@ class SegformerSharingModel(EvaluationModel):
         return result
 
 
-class SegformerTissueToCellDecoderModel(SegformerSharingModel):
+class SegformerTissueToCellDecoderModel(SegformerJointPred2InputModel):
 
     def __init__(self, metadata, cell_model, tissue_model_path=None):
         assert tissue_model_path is None
