@@ -507,10 +507,9 @@ class SegformerJointPred2InputModel(EvaluationModel):
         tissue_patch = torch.from_numpy(tissue_patch).permute(2, 0, 1)
         tissue_patch = tissue_patch.unsqueeze(0).to(self.device)
 
-        model_input = torch.cat([cell_patch, tissue_patch], dim=1)
         offsets = torch.tensor([[x_offset, y_offset]])
 
-        cell_prediction, _ = self.model(model_input, offsets)
+        cell_prediction, _ = self.model(cell_patch, tissue_patch, offsets)
         cell_prediction = cell_prediction.squeeze(0).detach().cpu()
         softmaxed = softmax(cell_prediction, dim=0)
 
