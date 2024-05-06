@@ -1,6 +1,7 @@
 from pathlib import Path
 
-# TODO: Remove "test" in front of paths
+# These files are of no use to our project, only for uploading a model to
+# the grand challenge
 
 # Grand Challenge folders were input files can be found
 GC_CELL_FPATH = Path("test/input/images/cell_patches/")

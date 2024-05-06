@@ -14,7 +14,7 @@ sys.path.append(os.getcwd())
 from src.models import DeepLabV3plusModel, CustomSegformerModel
 from src.models import (
     SegformerJointPred2InputModel as SegformerSharingModule,
-    SegformerTissueToCellDecoderModel as SegformerTissueToCellDecoderModule,
+    SegformerAdditiveJointPred2DecoderModel as SegformerTissueToCellDecoderModule,
 )
 from src.utils.utils import crop_and_resize_tissue_patch, get_point_predictions
 
@@ -398,58 +398,58 @@ class SegformerTissueFromFile(EvaluationModel):
         return result
 
 
-class SegformerSharingTissueFromFile(EvaluationModel):
+# class SegformerSharingTissueFromFile(EvaluationModel):
 
-    def __init__(
-        self, metadata, cell_model, tissue_model_path=None, device=torch.device("cuda")
-    ):
-        assert tissue_model_path is None
-        super().__init__(metadata, cell_model, tissue_model_path, device=device)
-        backbone_model = "b3"
-        self.tissue_from_file = True
+#     def __init__(
+#         self, metadata, cell_model, tissue_model_path=None, device=torch.device("cuda")
+#     ):
+#         assert tissue_model_path is None
+#         super().__init__(metadata, cell_model, tissue_model_path, device=device)
+#         backbone_model = "b3"
+#         self.tissue_from_file = True
 
-        if isinstance(cell_model, str):
-            self.model = CustomSegformerModel(  # TODO: Is this the correct model?
-                backbone_name=backbone_model,
-                num_classes=3,
-                num_channels=6,
-            )
-            self.model.load_state_dict(torch.load(cell_model))
-        elif isinstance(cell_model, torch.nn.Module):
-            self.model = cell_model
-        else:
-            raise ValueError("Invalid cell model type")
+#         if isinstance(cell_model, str):
+#             self.model = CustomSegformerModel(  # TODO: Is this the correct model?
+#                 backbone_name=backbone_model,
+#                 num_classes=3,
+#                 num_channels=6,
+#             )
+#             self.model.load_state_dict(torch.load(cell_model))
+#         elif isinstance(cell_model, torch.nn.Module):
+#             self.model = cell_model
+#         else:
+#             raise ValueError("Invalid cell model type")
 
-        self.model.eval()
-        self.model.to(self.device)
+#         self.model.eval()
+#         self.model.to(self.device)
 
-    def __call__(self, cell_patch, tissue_patch, pair_id, transform=None) -> list:
-        """
-        Note:
-        - Expects tissue_patch to have values in {0, 1}
+#     def __call__(self, cell_patch, tissue_patch, pair_id, transform=None) -> list:
+#         """
+#         Note:
+#         - Expects tissue_patch to have values in {0, 1}
 
-        """
-        self.validate_inputs(cell_patch, tissue_patch)
-        if transform is not None:
-            transformed = transform(image=cell_patch, tissue=tissue_patch)
-            cell_patch = transformed["image"]
-            tissue_patch = transformed["tissue"]
+#         """
+#         self.validate_inputs(cell_patch, tissue_patch)
+#         if transform is not None:
+#             transformed = transform(image=cell_patch, tissue=tissue_patch)
+#             cell_patch = transformed["image"]
+#             tissue_patch = transformed["tissue"]
 
-        cell_patch = self._scale_patch(cell_patch)
-        tissue_patch = self._scale_patch(tissue_patch, do_scale=False)
+#         cell_patch = self._scale_patch(cell_patch)
+#         tissue_patch = self._scale_patch(tissue_patch, do_scale=False)
 
-        cell_patch = torch.from_numpy(cell_patch).permute(2, 0, 1)
-        cell_patch = cell_patch.unsqueeze(0).to(self.device)
+#         cell_patch = torch.from_numpy(cell_patch).permute(2, 0, 1)
+#         cell_patch = cell_patch.unsqueeze(0).to(self.device)
 
-        tissue_patch = torch.from_numpy(tissue_patch).permute(2, 0, 1)
-        tissue_patch = tissue_patch.unsqueeze(0).to(self.device)
+#         tissue_patch = torch.from_numpy(tissue_patch).permute(2, 0, 1)
+#         tissue_patch = tissue_patch.unsqueeze(0).to(self.device)
 
-        model_input = torch.cat([cell_patch, tissue_patch], dim=1)
+#         model_input = torch.cat([cell_patch, tissue_patch], dim=1)
 
-        cell_prediction = self.model(model_input, (pair_id,)).squeeze(0).detach().cpu()
-        softmaxed = softmax(cell_prediction, dim=0)[:3]
-        result = get_point_predictions(softmaxed)
-        return result
+#         cell_prediction = self.model(model_input, (pair_id,)).squeeze(0).detach().cpu()
+#         softmaxed = softmax(cell_prediction, dim=0)[:3]
+#         result = get_point_predictions(softmaxed)
+#         return result
 
 
 class SegformerJointPred2InputModel(EvaluationModel):
@@ -517,12 +517,15 @@ class SegformerJointPred2InputModel(EvaluationModel):
         return result
 
 
-class SegformerTissueToCellDecoderModel(SegformerJointPred2InputModel):
+class SegformerAdditiveJointPred2DecoderModel(SegformerJointPred2InputModel):
 
-    def __init__(self, metadata, cell_model, tissue_model_path=None):
-        assert tissue_model_path is None
-        super().__init__(metadata, cell_model, tissue_model_path)
+    def __init__(
+        self, metadata, cell_model, cell_transform=None, tissue_transform=None
+    ):
+        super().__init__(metadata, cell_model, None)
         backbone_model = "b3"
+        self.cell_transform = cell_transform
+        self.tissue_transform = tissue_transform
 
         if isinstance(cell_model, str):
             self.model = SegformerTissueToCellDecoderModule(
