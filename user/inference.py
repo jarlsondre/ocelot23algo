@@ -526,16 +526,170 @@ class SegformerAdditiveJointPred2DecoderModel(SegformerJointPred2InputModel):
         backbone_model = "b3"
         self.cell_transform = cell_transform
         self.tissue_transform = tissue_transform
+        self.input_image_size = 1024
+        self.output_image_size=1024
 
         if isinstance(cell_model, str):
             self.model = SegformerTissueToCellDecoderModule(
                 backbone_model=backbone_model,
                 pretrained_dataset="ade",
-                input_image_size=1024,
-                output_image_size=1024,
+                input_image_size=self.input_image_size,
+                output_image_size=self.output_image_size,
             )
             self.model.load_state_dict(torch.load(cell_model))
         elif isinstance(cell_model, torch.nn.Module):
             self.model = cell_model
         else:
             raise ValueError("Invalid model type ")
+
+
+import cv2
+
+class SegformerAdditiveJointPred2DecoderWithTTAModel(SegformerJointPred2InputModel):
+
+    def __init__(
+        self, metadata, cell_model, cell_transform=None, tissue_transform=None
+    ):
+        super().__init__(metadata, cell_model, None)
+        backbone_model = "b3"
+        self.cell_transform = cell_transform
+        self.tissue_transform = tissue_transform
+        self.input_image_size = 1024
+        self.output_image_size=1024
+
+        if isinstance(cell_model, str):
+            self.model = SegformerTissueToCellDecoderModule(
+                backbone_model=backbone_model,
+                pretrained_dataset="ade",
+                input_image_size=self.input_image_size,
+                output_image_size=self.output_image_size,
+            )
+            self.model.load_state_dict(torch.load(cell_model))
+        elif isinstance(cell_model, torch.nn.Module):
+            self.model = cell_model
+        else:
+            raise ValueError("Invalid model type ")
+
+    def __call__(self, cell_patch, tissue_patch, pair_id, transform=None) -> List:
+        self.validate_inputs(cell_patch, tissue_patch)
+        self.model.eval()
+
+        # Getting the correct metadata
+        meta_pair = self.metadata[pair_id]
+        x_offset = meta_pair["patch_x_offset"]
+        y_offset = meta_pair["patch_y_offset"]
+
+        if self.cell_transform is not None:
+            cell_transformed = self.cell_transform(
+                image=cell_patch,
+                mask=cell_patch,
+            )
+            cell_patch = cell_transformed["image"]
+
+        if self.tissue_transform is not None:
+            tissue_transformed = self.tissue_transform(
+                image=tissue_patch,
+                mask=tissue_patch,
+            )
+            tissue_patch = tissue_transformed["image"]
+
+        cell_patch = self._scale_patch(cell_patch)
+        tissue_patch = self._scale_patch(tissue_patch, do_scale=True)
+
+        offset = np.asarray([x_offset, y_offset])
+
+        # TTA
+        tissue_patch_tta, offsets = self.geometric_test_time_augmentation(tissue_patch, offset)
+        cell_patch_tta, _ = self.geometric_test_time_augmentation(cell_patch, offset)
+
+        results = []
+
+        for tissue_patch, cell_patch, offset in zip(tissue_patch_tta, cell_patch_tta, offsets):
+            cell_patch = torch.from_numpy(cell_patch).permute(2, 0, 1)
+            cell_patch = cell_patch.unsqueeze(0).to(self.device)
+
+            tissue_patch = torch.from_numpy(tissue_patch).permute(2, 0, 1)
+            tissue_patch = tissue_patch.unsqueeze(0).to(self.device)
+
+            offset = torch.from_numpy(offset).unsqueeze(0)
+
+            cell_prediction, _ = self.model(cell_patch, tissue_patch, offset)
+            cell_prediction = cell_prediction.squeeze(0).detach().cpu()
+            softmaxed = softmax(cell_prediction, dim=0)
+
+            result = softmaxed.numpy()
+            results.append(result)
+
+        result = self.reverse_tta(results)
+        result = torch.from_numpy(result)
+        result = get_point_predictions(result)
+
+        return result
+
+    def geometric_test_time_augmentation(self, img: np.ndarray, offset: np.ndarray) -> List[np.ndarray]:
+            """
+            Return all 8 possible geometric transformations of an image
+            With corresponding offset
+            """
+
+            transformed = []
+            offsets = []
+            for flip in [None, 1]:
+                for rotate in [
+                    None,
+                    cv2.ROTATE_90_CLOCKWISE,
+                    cv2.ROTATE_180,
+                    cv2.ROTATE_90_COUNTERCLOCKWISE,
+                ]:
+                    t_img = cv2.flip(img, flip) if flip is not None else img
+                    offset = self.pos_flipped_yaxis(offset) if flip is not None else offset
+                    t_img = cv2.rotate(t_img, rotate) if rotate is not None else t_img
+                    offset = self.pos_rotated_center(position=offset, angle=rotate) if rotate is not None else offset
+                    transformed.append(t_img)
+                    offsets.append(offset)
+            return transformed, offsets
+
+    def reverse_tta(self, pred: np.ndarray) -> np.ndarray:
+        """Combine test-time augmentation predictions into a single prediction"""
+        i = 0
+        pred = torch.Tensor(np.array(pred))
+        for flip in [None, 2]:
+            for rotate in [None, 1, 2, 3]:
+                if rotate:
+                    pred[i] = torch.rot90(pred[i], k=rotate, dims=(1, 2))
+                if flip is not None:
+                    pred[i] = torch.flip(pred[i], dims=[flip])
+                i += 1
+        mean_pred = torch.mean(pred, dim=0)
+        return mean_pred.numpy()
+
+    # Finds the corresponding postion in the image flipped around the y-axis
+    def pos_flipped_yaxis(self, position):
+        flipped_pos = np.array([1-position[0], position[1]])
+        return flipped_pos
+    
+    def rotate_position_90_counterclock(self, position):
+        if position[0] > 0.5 and position[1] > 0.5:
+            return np.array([1-position[0], position[1]])
+        elif position[0] < 0.5 and position[1] > 0.5:
+            return np.array([position[0], 1-position[1]])
+        elif position[0] < 0.5 and position[1] < 0.5:
+            return np.array([1-position[0], position[1]])
+        elif position[0] > 0.5 and position[1] < 0.5:
+            return np.array([position[0], 1-position[1]])
+    
+    # Finds the corresponding position in the image rotated with angle
+    def pos_rotated_center(self, position, angle):
+        if angle == cv2.ROTATE_90_CLOCKWISE:
+            pos = self.rotate_position_90_counterclock(position)
+            pos = self.rotate_position_90_counterclock(pos)
+            rot_pos = self.rotate_position_90_counterclock(pos)
+        elif angle==cv2.ROTATE_180:
+            pos = self.rotate_position_90_counterclock(position)
+            rot_pos = self.rotate_position_90_counterclock(pos)
+        elif angle==cv2.ROTATE_90_COUNTERCLOCKWISE:
+            rot_pos = self.rotate_position_90_counterclock(position)
+        return rot_pos
+
+        
+        
